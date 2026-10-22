@@ -1,25 +1,13 @@
 {
   "name": "azulize",
   "version": "1.0.0",
-  "description": "Azulize - Controle de Gastos com Neon Serverless Postgres",
-  "main": "server.js",
+  "description": "Azulize - Controle de Gastos",
+  "private": true,
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "test-db": "node test-connection.js"
-  },
-  "keywords": [
-    "finance",
-    "postgres",
-    "neon"
-  ],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@neondatabase/serverless": "^0.10.4",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "nodemailer": "^10.2.0"
+    "start": "npm --prefix backend start",
+    "dev": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "test-db": "npm --prefix backend run test-db"
   }
 }

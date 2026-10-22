@@ -1,13 +1,16 @@
-require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const crypto = require('crypto');
 const { neon } = require('@neondatabase/serverless');
 const nodemailer = require('nodemailer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const FRONTEND_DIST = path.join(__dirname, '..', 'frontend', 'dist');
+const FRONTEND_DIR = fs.existsSync(FRONTEND_DIST) ? FRONTEND_DIST : path.join(__dirname, '..', 'frontend');
 
 if (!process.env.DATABASE_URL) {
   console.error('❌ ERRO: DATABASE_URL não definida no arquivo .env');
@@ -25,7 +28,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(FRONTEND_DIR));
 
 // ==============================================================================
 // UTILITÁRIOS DE CRIPTOGRAFIA E VALIDAÇÃO
@@ -70,7 +73,7 @@ async function sendAuthEmail(toEmail, subject, title, code, instruction) {
         <p style="color: #94a3b8; font-size: 11px; margin: 0;">Se você não solicitou este código, por favor ignore esta mensagem.</p>
       </div>
       <div style="background: #f7fbff; border-top: 1px solid #d8eaf7; padding: 14px; text-align: center; font-size: 11px; color: #6c849b;">
-        © Azulize — Sistema integrado ao Neon Serverless PostgreSQL
+        © Azulize — Controle de Gastos & Educação Financeira
       </div>
     </div>
   `;
@@ -253,7 +256,7 @@ app.post('/api/auth/register-confirm', async (req, res) => {
 
     const user = inserted[0];
     res.status(201).json({
-      message: 'Conta ativada com sucesso no Neon PostgreSQL!',
+      message: 'Conta ativada com sucesso!',
       user: {
         id: user.id,
         name: user.name,
@@ -263,7 +266,7 @@ app.post('/api/auth/register-confirm', async (req, res) => {
     });
   } catch (err) {
     console.error('Erro no register-confirm:', err);
-    res.status(500).json({ error: 'Erro ao ativar a conta no banco de dados.' });
+    res.status(500).json({ error: 'Erro ao ativar a conta. Tente novamente.' });
   }
 });
 
@@ -293,7 +296,7 @@ app.post('/api/auth/register', async (req, res) => {
 
     const user = inserted[0];
     res.status(201).json({
-      message: 'Conta criada com sucesso no banco de dados!',
+      message: 'Conta criada com sucesso!',
       user: {
         id: user.id,
         name: user.name,
@@ -303,7 +306,7 @@ app.post('/api/auth/register', async (req, res) => {
     });
   } catch (err) {
     console.error('Erro no register direto:', err);
-    res.status(500).json({ error: 'Erro interno ao salvar novo usuário no banco.' });
+    res.status(500).json({ error: 'Erro ao criar conta. Tente novamente.' });
   }
 });
 
@@ -376,7 +379,7 @@ app.get('/api/user/me', async (req, res) => {
     `;
 
     if (rows.length === 0) {
-      return res.status(404).json({ error: 'Usuário não encontrado no banco de dados.' });
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
     }
 
     const user = rows[0];
@@ -389,7 +392,7 @@ app.get('/api/user/me', async (req, res) => {
     });
   } catch (err) {
     console.error('Erro ao verificar usuário:', err);
-    res.status(500).json({ error: 'Erro ao consultar usuário no banco.' });
+    res.status(500).json({ error: 'Erro ao carregar dados do usuário.' });
   }
 });
 
@@ -435,7 +438,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     });
   } catch (err) {
     console.error('Erro no forgot-password:', err);
-    res.status(500).json({ error: 'Erro ao registrar código de recuperação no banco.' });
+    res.status(500).json({ error: 'Erro ao enviar código de recuperação. Tente novamente.' });
   }
 });
 
@@ -485,10 +488,10 @@ app.post('/api/auth/reset-password', async (req, res) => {
       WHERE id = ${resetRecord.id};
     `;
 
-    res.json({ message: 'Senha redefinida com sucesso no banco de dados! Faça o login.' });
+    res.json({ message: 'Senha redefinida com sucesso! Você já pode entrar.' });
   } catch (err) {
     console.error('Erro no reset-password:', err);
-    res.status(500).json({ error: 'Erro ao atualizar senha no banco de dados.' });
+    res.status(500).json({ error: 'Erro ao redefinir senha. Tente novamente.' });
   }
 });
 
@@ -601,7 +604,7 @@ app.post('/api/expenses', async (req, res) => {
 
     const exp = inserted[0];
     res.status(201).json({
-      message: 'Gasto salvo com sucesso no banco de dados!',
+      message: 'Gasto adicionado com sucesso!',
       expense: {
         id: exp.id,
         description: exp.description,
@@ -612,7 +615,7 @@ app.post('/api/expenses', async (req, res) => {
     });
   } catch (err) {
     console.error('Erro ao adicionar gasto:', err);
-    res.status(500).json({ error: 'Erro ao registrar gasto no banco de dados.' });
+    res.status(500).json({ error: 'Erro ao adicionar gasto. Tente novamente.' });
   }
 });
 
@@ -642,13 +645,13 @@ app.delete('/api/expenses/:id', async (req, res) => {
     }
 
     if (deleted.length === 0) {
-      return res.status(404).json({ error: 'Gasto não encontrado ou já excluído no banco.' });
+      return res.status(404).json({ error: 'Gasto não encontrado ou já excluído.' });
     }
 
-    res.json({ message: 'Gasto excluído do banco com sucesso!', id });
+    res.json({ message: 'Gasto excluído com sucesso!', id });
   } catch (err) {
     console.error('Erro ao excluir despesa:', err);
-    res.status(500).json({ error: 'Erro ao excluir gasto do banco de dados.' });
+    res.status(500).json({ error: 'Erro ao excluir gasto. Tente novamente.' });
   }
 });
 
@@ -672,17 +675,17 @@ app.put('/api/user/budget', async (req, res) => {
     `;
 
     if (updated.length === 0) return res.status(404).json({ error: 'Usuário não encontrado.' });
-    res.json({ message: 'Orçamento atualizado no banco!', user: updated[0] });
+    res.json({ message: 'Orçamento atualizado com sucesso!', user: updated[0] });
   } catch (err) {
     console.error('Erro ao atualizar orçamento:', err);
-    res.status(500).json({ error: 'Erro ao atualizar orçamento no banco.' });
+    res.status(500).json({ error: 'Erro ao atualizar orçamento. Tente novamente.' });
   }
 });
 
 // Fallback para SPA (se não for rota de API)
 app.use((req, res, next) => {
   if (req.method === 'GET' && !req.path.startsWith('/api/')) {
-    return res.sendFile(path.join(__dirname, 'index.html'));
+    return res.sendFile(path.join(FRONTEND_DIR, 'index.html'));
   }
   next();
 });
