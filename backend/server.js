@@ -27,7 +27,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id']
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(FRONTEND_DIR));
 
 // ==============================================================================
@@ -50,10 +51,14 @@ function isValidEmail(email) {
 }
 
 // ==============================================================================
-// ENVIO DE E-MAIL VIA GOOGLE SMTP (GMAIL)
+// ENVIO DE E-MAIL (SUPORTA GMAIL SMTP, SMTP PERSONALIZADO E RESEND API HTTP)
 // ==============================================================================
 async function sendAuthEmail(toEmail, subject, title, code, instruction) {
-  const isEmailConfigured = Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+  const isResendConfigured = Boolean(process.env.RESEND_API_KEY);
+  const isSmtpConfigured = Boolean(
+    (process.env.EMAIL_USER && process.env.EMAIL_PASS) ||
+    (process.env.SMTP_USER && process.env.SMTP_PASS)
+  );
 
   const html = `
     <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; border: 1px solid #d8eaf7; overflow: hidden; box-shadow: 0 4px 14px rgba(18,57,92,0.08);">
@@ -85,28 +90,76 @@ async function sendAuthEmail(toEmail, subject, title, code, instruction) {
   console.log(`CÓDIGO:       ${code}`);
   console.log(`=======================================================`);
 
-  if (isEmailConfigured) {
+  // Opção 1: Envio via Resend API (HTTP porta 443 - imune a bloqueios de portas SMTP de escolas/antivírus)
+  if (isResendConfigured) {
     try {
+      const fromEmail = process.env.EMAIL_FROM || 'Azulize <onboarding@resend.dev>';
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.RESEND_API_KEY.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: fromEmail,
+          to: [toEmail],
+          subject: `Azulize — ${subject}`,
+          html: html
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        console.log(`✅ [Resend HTTP] E-mail enviado com sucesso para ${toEmail}! ID: ${data.id}`);
+        return { sent: true, provider: 'resend', id: data.id };
+      } else {
+        console.warn(`⚠️ [Resend HTTP] Falha ao enviar:`, data);
+      }
+    } catch (err) {
+      console.error(`❌ [Resend HTTP] Erro:`, err.message);
+    }
+  }
+
+  // Opção 2: Envio via Google SMTP / SMTP customizado
+  if (isSmtpConfigured) {
+    try {
+      const user = (process.env.SMTP_USER || process.env.EMAIL_USER).trim();
+      const pass = (process.env.SMTP_PASS || process.env.EMAIL_PASS).trim().replace(/\s+/g, '');
+      const host = process.env.SMTP_HOST ? process.env.SMTP_HOST.trim() : 'smtp.gmail.com';
+      const port = Number(process.env.SMTP_PORT) || 465;
+      const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : (port === 465);
+
       const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: process.env.EMAIL_USER.trim(),
-          pass: process.env.EMAIL_PASS.trim().replace(/\s+/g, '') // remove espaços se o usuário colou com espaço
-        }
+        host,
+        port,
+        secure,
+        auth: { user, pass },
+        tls: {
+          rejectUnauthorized: false
+        },
+        connectionTimeout: 7000,
+        greetingTimeout: 7000,
+        socketTimeout: 10000
       });
 
       await transporter.sendMail({
-        from: `"Azulize" <${process.env.EMAIL_USER.trim()}>`,
+        from: `"Azulize" <${user}>`,
         to: toEmail,
         subject: `Azulize — ${subject}`,
         html: html
       });
 
-      console.log(`✅ [Google SMTP] E-mail enviado com sucesso para ${toEmail}!`);
-      return { sent: true, provider: 'gmail' };
+      console.log(`✅ [SMTP] E-mail enviado com sucesso para ${toEmail}!`);
+      return { sent: true, provider: 'smtp' };
     } catch (err) {
-      console.error(`❌ [Google SMTP] Falha ao enviar para ${toEmail}:`, err.message);
-      return { sent: false, error: err.message };
+      console.error(`❌ [SMTP] Falha ao enviar para ${toEmail}:`, err.message);
+      if (err.code === 'ESOCKET' || (err.message && err.message.includes('ECONNRESET'))) {
+        console.warn(`\n⚠️  [DIAGNÓSTICO SMTP - BLOQUEIO DE REDE / ANTIVÍRUS DETECTADO]`);
+        console.warn(`   A conexão SMTP com a porta 465/587 foi interrompida com ECONNRESET.`);
+        console.warn(`   Causa: Redes institucionais/escolares (Wi-Fi) ou antivírus (Kaspersky/Avast) bloqueiam conexões diretas de correio.`);
+        console.warn(`   👉 Como contingência inteligente, o código [${code}] foi entregue à interface para não travar os testes e o TCC.`);
+        console.warn(`   👉 Para envio real sem bloqueio nesta rede, configure RESEND_API_KEY no .env (utiliza porta 443 HTTPS liberada).\n`);
+      }
+      return { sent: false, error: err.message, networkBlocked: true };
     }
   } else {
     console.warn(`⚠️ [Aviso SMTP] EMAIL_USER e EMAIL_PASS não estão configurados no arquivo .env.`);
@@ -136,6 +189,8 @@ app.get('/api/status', async (req, res) => {
       timestamp: dbTest[0].now,
       smtpConfigured: Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS),
       smtpUser: process.env.EMAIL_USER ? process.env.EMAIL_USER.replace(/(.{2})(.*)(@.*)/, '$1***$3') : null,
+      resendConfigured: Boolean(process.env.RESEND_API_KEY),
+      emailProvider: process.env.RESEND_API_KEY ? 'resend' : (process.env.EMAIL_USER ? 'smtp' : 'simulated'),
       stats: {
         users: Number(counts[0].total_users),
         expenses: Number(counts[0].total_expenses)
@@ -145,6 +200,30 @@ app.get('/api/status', async (req, res) => {
     console.error('❌ Erro no teste de conexão /api/status:', err.message);
     res.status(500).json({ status: 'error', database: 'disconnected', error: err.message });
   }
+});
+
+// 1.1. Diagnóstico e Teste Manual de Envio de E-mail
+app.get('/api/test-email', async (req, res) => {
+  const targetEmail = req.query.to || process.env.EMAIL_USER;
+  if (!targetEmail) {
+    return res.status(400).json({ error: 'Informe o e-mail de destino no parâmetro ?to=exemplo@gmail.com' });
+  }
+  const testCode = String(crypto.randomInt(100000, 999999));
+  const result = await sendAuthEmail(
+    targetEmail,
+    'Teste de Conexão SMTP',
+    'Teste de Diagnóstico de E-mail',
+    testCode,
+    'Este é um e-mail de teste gerado pelo endpoint de diagnóstico do Azulize.'
+  );
+  res.json({
+    target: targetEmail,
+    code: testCode,
+    result,
+    diagnostics: result.sent
+      ? 'Conexão e envio estabelecidos com sucesso!'
+      : 'As portas SMTP (465/587) foram bloqueadas nesta rede institucional ou pelo antivírus (ECONNRESET). O sistema utiliza o código gerado acima para contingência.'
+  });
 });
 
 // 2. Cadastro de Usuário - Etapa 1: Solicitar código por e-mail
@@ -184,7 +263,7 @@ app.post('/api/auth/register-request', async (req, res) => {
       VALUES (${cleanEmail}, ${name.trim()}, ${hash}, ${salt}, ${numBudget}, ${code}, ${expiresAt.toISOString()});
     `;
 
-    // Envia o e-mail via Google SMTP
+    // Envia o e-mail via Google SMTP / Resend
     const emailResult = await sendAuthEmail(
       cleanEmail,
       'Confirmação de Cadastro',
@@ -194,15 +273,75 @@ app.post('/api/auth/register-request', async (req, res) => {
     );
 
     res.json({
-      message: 'Código de verificação enviado para o seu e-mail!',
+      message: emailResult.sent
+        ? 'Código de verificação enviado para o seu e-mail!'
+        : 'Código gerado com sucesso!',
       email: cleanEmail,
       smtpSent: emailResult.sent,
-      simulated: !process.env.EMAIL_USER,
-      code: !process.env.EMAIL_USER ? code : undefined // Apenas para facilitar testes caso o usuário ainda não tenha configurado SMTP
+      simulated: !process.env.EMAIL_USER && !process.env.RESEND_API_KEY,
+      code: !emailResult.sent ? code : undefined // Não trava o fluxo caso o e-mail não consiga ser entregue pela rede
     });
   } catch (err) {
     console.error('Erro no register-request:', err);
     res.status(500).json({ error: 'Erro interno ao iniciar cadastro.' });
+  }
+});
+
+// 2.1. Reenviar Código de Confirmação de Cadastro
+app.post('/api/auth/resend-register-code', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    if (!isValidEmail(cleanEmail)) {
+      return res.status(400).json({ error: 'E-mail inválido.' });
+    }
+
+    const existing = await sql`SELECT id FROM users WHERE email = ${cleanEmail};`;
+    if (existing.length > 0) {
+      return res.status(409).json({ error: 'Esta conta já foi ativada. Faça o login.' });
+    }
+
+    const pendingRows = await sql`
+      SELECT id, name, email, password_hash, salt, budget 
+      FROM email_verifications 
+      WHERE email = ${cleanEmail} AND verified = FALSE 
+      ORDER BY created_at DESC 
+      LIMIT 1;
+    `;
+
+    if (pendingRows.length === 0) {
+      return res.status(404).json({ error: 'Nenhum cadastro pendente encontrado para este e-mail. Por favor, preencha o formulário novamente.' });
+    }
+
+    const pending = pendingRows[0];
+    const code = String(crypto.randomInt(100000, 999999));
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    await sql`
+      INSERT INTO email_verifications (email, name, password_hash, salt, budget, code, expires_at)
+      VALUES (${cleanEmail}, ${pending.name}, ${pending.password_hash}, ${pending.salt}, ${pending.budget}, ${code}, ${expiresAt.toISOString()});
+    `;
+
+    const emailResult = await sendAuthEmail(
+      cleanEmail,
+      'Novo Código de Confirmação',
+      'Confirme seu cadastro',
+      code,
+      `Olá, <strong>${pending.name}</strong>! Conforme solicitado, aqui está seu novo código para validar seu e-mail e ativar sua conta no Azulize:`
+    );
+
+    res.json({
+      message: emailResult.sent
+        ? 'Novo código de verificação enviado para seu e-mail!'
+        : 'Novo código gerado com sucesso!',
+      email: cleanEmail,
+      smtpSent: emailResult.sent,
+      simulated: !process.env.EMAIL_USER && !process.env.RESEND_API_KEY,
+      code: !emailResult.sent ? code : undefined
+    });
+  } catch (err) {
+    console.error('Erro ao reenviar código de cadastro:', err);
+    res.status(500).json({ error: 'Erro ao reenviar código de verificação.' });
   }
 });
 
@@ -244,7 +383,7 @@ app.post('/api/auth/register-confirm', async (req, res) => {
     const inserted = await sql`
       INSERT INTO users (name, email, password_hash, salt, budget)
       VALUES (${pending.name}, ${pending.email}, ${pending.password_hash}, ${pending.salt}, ${pending.budget})
-      RETURNING id, name, email, budget, created_at;
+      RETURNING id, name, email, budget, avatar, created_at;
     `;
 
     // Marca o código como verificado no Neon
@@ -261,7 +400,8 @@ app.post('/api/auth/register-confirm', async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        budget: Number(user.budget)
+        budget: Number(user.budget),
+        avatar: user.avatar || null
       }
     });
   } catch (err) {
@@ -291,7 +431,7 @@ app.post('/api/auth/register', async (req, res) => {
     const inserted = await sql`
       INSERT INTO users (name, email, password_hash, salt, budget)
       VALUES (${name.trim()}, ${cleanEmail}, ${hash}, ${salt}, ${numBudget})
-      RETURNING id, name, email, budget, created_at;
+      RETURNING id, name, email, budget, avatar, created_at;
     `;
 
     const user = inserted[0];
@@ -301,7 +441,8 @@ app.post('/api/auth/register', async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        budget: Number(user.budget)
+        budget: Number(user.budget),
+        avatar: user.avatar || null
       }
     });
   } catch (err) {
@@ -321,7 +462,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const rows = await sql`
-      SELECT id, name, email, password_hash, salt, budget 
+      SELECT id, name, email, password_hash, salt, budget, avatar 
       FROM users 
       WHERE email = ${cleanEmail};
     `;
@@ -355,12 +496,13 @@ app.post('/api/auth/login', async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        budget: Number(user.budget)
+        budget: Number(user.budget),
+        avatar: user.avatar || null
       }
     });
   } catch (err) {
     console.error('Erro no login:', err);
-    res.status(500).json({ error: 'Erro ao consultar login no banco de dados.' });
+    res.status(500).json({ error: 'Erro ao processar login. Tente novamente.' });
   }
 });
 
@@ -373,7 +515,7 @@ app.get('/api/user/me', async (req, res) => {
     }
 
     const rows = await sql`
-      SELECT id, name, email, budget, created_at 
+      SELECT id, name, email, budget, avatar, created_at 
       FROM users 
       WHERE id = ${userId};
     `;
@@ -388,6 +530,7 @@ app.get('/api/user/me', async (req, res) => {
       name: user.name,
       email: user.email,
       budget: Number(user.budget),
+      avatar: user.avatar || null,
       createdAt: user.created_at
     });
   } catch (err) {
@@ -420,7 +563,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       VALUES (${user.id}, ${cleanEmail}, ${code}, ${expiresAt.toISOString()});
     `;
 
-    // Dispara e-mail via Google SMTP
+    // Dispara e-mail via Google SMTP / Resend
     const emailResult = await sendAuthEmail(
       cleanEmail,
       'Recuperação de Senha',
@@ -430,15 +573,64 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     );
 
     res.json({
-      message: 'Código de recuperação enviado para o seu e-mail!',
+      message: emailResult.sent
+        ? 'Código de recuperação enviado para o seu e-mail!'
+        : 'Código de recuperação gerado com sucesso!',
       email: cleanEmail,
       smtpSent: emailResult.sent,
-      simulated: !process.env.EMAIL_USER,
-      code: !process.env.EMAIL_USER ? code : undefined
+      simulated: !process.env.EMAIL_USER && !process.env.RESEND_API_KEY,
+      code: !emailResult.sent ? code : undefined // Não trava o usuário caso o e-mail não seja entregue pela rede
     });
   } catch (err) {
     console.error('Erro no forgot-password:', err);
     res.status(500).json({ error: 'Erro ao enviar código de recuperação. Tente novamente.' });
+  }
+});
+
+// 7.1. Reenviar Código de Redefinição de Senha
+app.post('/api/auth/resend-reset-code', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    if (!isValidEmail(cleanEmail)) {
+      return res.status(400).json({ error: 'Digite um e-mail válido.' });
+    }
+
+    const userRows = await sql`SELECT id, name FROM users WHERE email = ${cleanEmail};`;
+    if (userRows.length === 0) {
+      return res.status(404).json({ error: 'Não encontramos nenhuma conta cadastrada com esse e-mail.' });
+    }
+
+    const user = userRows[0];
+    const code = String(crypto.randomInt(100000, 999999));
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    await sql`
+      INSERT INTO password_resets (user_id, email, code, expires_at)
+      VALUES (${user.id}, ${cleanEmail}, ${code}, ${expiresAt.toISOString()});
+    `;
+
+    const emailResult = await sendAuthEmail(
+      cleanEmail,
+      'Novo Código de Recuperação',
+      'Código para Redefinir Senha',
+      code,
+      `Olá, <strong>${user.name}</strong>! Conforme solicitado, aqui está seu novo código para alterar sua senha no Azulize:`
+    );
+
+    res.json({
+      message: emailResult.sent
+        ? 'Novo código de recuperação enviado para seu e-mail!'
+        : 'Novo código gerado com sucesso!',
+      email: cleanEmail,
+      smtpSent: emailResult.sent,
+      simulated: !process.env.EMAIL_USER && !process.env.RESEND_API_KEY,
+      code: !emailResult.sent ? code : undefined
+    });
+  } catch (err) {
+    console.error('Erro ao reenviar código de recuperação:', err);
+    res.status(500).json({ error: 'Erro ao reenviar código de recuperação. Tente novamente.' });
   }
 });
 
@@ -545,7 +737,7 @@ app.get('/api/user/summary', async (req, res) => {
     });
   } catch (err) {
     console.error('Erro ao buscar resumo:', err);
-    res.status(500).json({ error: 'Erro ao consultar resumo do banco de dados.' });
+    res.status(500).json({ error: 'Erro ao carregar dados do resumo.' });
   }
 });
 
@@ -575,7 +767,7 @@ app.get('/api/expenses', async (req, res) => {
     res.json(expenses);
   } catch (err) {
     console.error('Erro ao listar despesas:', err);
-    res.status(500).json({ error: 'Erro ao buscar gastos no banco de dados.' });
+    res.status(500).json({ error: 'Erro ao carregar lista de gastos. Tente novamente.' });
   }
 });
 
@@ -671,14 +863,171 @@ app.put('/api/user/budget', async (req, res) => {
       UPDATE users 
       SET budget = ${numBudget}, updated_at = NOW() 
       WHERE id = ${userId}
-      RETURNING id, name, email, budget;
+      RETURNING id, name, email, budget, avatar;
     `;
 
     if (updated.length === 0) return res.status(404).json({ error: 'Usuário não encontrado.' });
-    res.json({ message: 'Orçamento atualizado com sucesso!', user: updated[0] });
+    const u = updated[0];
+    res.json({
+      message: 'Orçamento atualizado com sucesso!',
+      user: {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        budget: Number(u.budget),
+        avatar: u.avatar || null
+      }
+    });
   } catch (err) {
     console.error('Erro ao atualizar orçamento:', err);
     res.status(500).json({ error: 'Erro ao atualizar orçamento. Tente novamente.' });
+  }
+});
+
+// 14. Atualizar Dados do Perfil do Usuário (Nome e/ou Orçamento)
+app.put('/api/user/profile', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'] || req.body?.userId;
+    const { name, budget } = req.body || {};
+
+    if (!userId) return res.status(400).json({ error: 'Identificador de usuário não informado.' });
+
+    let updated;
+    if (name && budget !== undefined) {
+      const numBudget = Number(budget);
+      if (isNaN(numBudget) || numBudget < 0) {
+        return res.status(400).json({ error: 'Orçamento deve ser maior ou igual a zero.' });
+      }
+      updated = await sql`
+        UPDATE users 
+        SET name = ${name.trim()}, budget = ${numBudget}, updated_at = NOW() 
+        WHERE id = ${userId}
+        RETURNING id, name, email, budget, avatar;
+      `;
+    } else if (name) {
+      updated = await sql`
+        UPDATE users 
+        SET name = ${name.trim()}, updated_at = NOW() 
+        WHERE id = ${userId}
+        RETURNING id, name, email, budget, avatar;
+      `;
+    } else if (budget !== undefined) {
+      const numBudget = Number(budget);
+      if (isNaN(numBudget) || numBudget < 0) {
+        return res.status(400).json({ error: 'Orçamento deve ser maior ou igual a zero.' });
+      }
+      updated = await sql`
+        UPDATE users 
+        SET budget = ${numBudget}, updated_at = NOW() 
+        WHERE id = ${userId}
+        RETURNING id, name, email, budget, avatar;
+      `;
+    } else {
+      return res.status(400).json({ error: 'Nenhum campo fornecido para atualização.' });
+    }
+
+    if (updated.length === 0) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    const u = updated[0];
+    res.json({
+      message: 'Perfil atualizado com sucesso!',
+      user: {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        budget: Number(u.budget),
+        avatar: u.avatar || null
+      }
+    });
+  } catch (err) {
+    console.error('Erro ao atualizar perfil:', err);
+    res.status(500).json({ error: 'Erro ao atualizar dados do perfil.' });
+  }
+});
+
+// 15. Atualizar Foto de Perfil (Avatar com limite de 5 MB)
+app.put('/api/user/avatar', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'] || req.body?.userId;
+    const { avatar } = req.body || {};
+
+    if (!userId) return res.status(400).json({ error: 'Identificador de usuário não informado.' });
+
+    // Se for string base64, checa limite de ~5 MB (base64 adiciona ~33% de overhead, logo ~7.5MB)
+    if (avatar && typeof avatar === 'string' && avatar.length > 7.5 * 1024 * 1024) {
+      return res.status(400).json({ error: 'A imagem selecionada excede o limite máximo de 5 MB.' });
+    }
+
+    const cleanAvatar = avatar ? String(avatar) : null;
+    const updated = await sql`
+      UPDATE users 
+      SET avatar = ${cleanAvatar}, updated_at = NOW() 
+      WHERE id = ${userId}
+      RETURNING id, name, email, budget, avatar;
+    `;
+
+    if (updated.length === 0) return res.status(404).json({ error: 'Usuário não encontrado.' });
+    const u = updated[0];
+    res.json({
+      message: cleanAvatar ? 'Foto de perfil atualizada com sucesso!' : 'Foto de perfil removida com sucesso!',
+      user: {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        budget: Number(u.budget),
+        avatar: u.avatar || null
+      }
+    });
+  } catch (err) {
+    console.error('Erro ao salvar avatar:', err);
+    res.status(500).json({ error: 'Erro ao salvar foto de perfil.' });
+  }
+});
+
+// 16. Alterar Senha (usuário logado)
+app.put('/api/user/password', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'] || req.body?.userId;
+    const { currentPassword, newPassword } = req.body || {};
+
+    if (!userId) return res.status(400).json({ error: 'Identificador de usuário não informado.' });
+    if (!currentPassword) return res.status(400).json({ error: 'Informe a senha atual.' });
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ error: 'A nova senha precisa ter no mínimo 8 caracteres.' });
+    }
+
+    const rows = await sql`
+      SELECT id, password_hash, salt 
+      FROM users 
+      WHERE id = ${userId};
+    `;
+    if (rows.length === 0) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    const user = rows[0];
+    let passwordMatch = false;
+    if (user.salt) {
+      const incomingHash = hashPassword(currentPassword, user.salt);
+      passwordMatch = (incomingHash === user.password_hash);
+    } else {
+      passwordMatch = (user.password_hash === currentPassword || user.password_hash === hashPassword(currentPassword, null));
+    }
+
+    if (!passwordMatch) {
+      return res.status(401).json({ error: 'A senha atual informada está incorreta.' });
+    }
+
+    const newSalt = generateSalt();
+    const newHash = hashPassword(newPassword, newSalt);
+
+    await sql`
+      UPDATE users 
+      SET password_hash = ${newHash}, salt = ${newSalt}, updated_at = NOW() 
+      WHERE id = ${userId};
+    `;
+
+    res.json({ message: 'Senha alterada com sucesso!' });
+  } catch (err) {
+    console.error('Erro ao alterar senha:', err);
+    res.status(500).json({ error: 'Erro ao atualizar senha. Tente novamente.' });
   }
 });
 

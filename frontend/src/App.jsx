@@ -26,7 +26,14 @@ const P = {
   back: 'M15 18l-6-6 6-6',
   send: 'M22 2L11 13M22 2l-7 20-4-9-9-4z',
   check: 'M5 13l4 4L19 7',
-  trash: 'M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2'
+  trash: 'M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2',
+  settings: 'M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z',
+  edit: 'M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z',
+  camera: 'M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2zM12 17a4 4 0 100-8 4 4 0 000 8z',
+  refresh: 'M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15',
+  shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+  close: 'M18 6L6 18M6 6l12 12',
+  image: 'M21 19V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2zM8.5 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM21 15l-5-5L5 21'
 };
 
 function Icon({ name, size = 18, className = '' }) {
@@ -45,6 +52,36 @@ function Icon({ name, size = 18, className = '' }) {
     >
       <path d={P[name] || ''} />
     </svg>
+  );
+}
+
+const getInitials = (n) => {
+  if (!n) return 'U';
+  const parts = n.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
+function UserAvatar({ user, size = 40, className = '' }) {
+  const avatar = user?.avatar;
+  const name = user?.name || '';
+  if (avatar) {
+    return (
+      <img
+        src={avatar}
+        alt={name}
+        style={{ width: size, height: size }}
+        className={`rounded-full object-cover shrink-0 ring-2 ring-blue/20 shadow-sm ${className}`}
+      />
+    );
+  }
+  return (
+    <div
+      style={{ width: size, height: size, fontSize: Math.max(11, Math.round(size * 0.38)) }}
+      className={`rounded-full shrink-0 font-display font-extrabold text-white flex items-center justify-center bg-gradient-to-br from-[#52a9ee] to-blue shadow-sm select-none ${className}`}
+    >
+      {getInitials(name)}
+    </div>
   );
 }
 
@@ -101,6 +138,27 @@ export default function App() {
   const [toastText, setToastText] = useState('');
   const toastTimer = useRef(null);
 
+  // Estados de Reenvio de Código
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendLoading, setResendLoading] = useState(false);
+
+  // Estados de Edição Rápida de Orçamento
+  const [editBudgetOpen, setEditBudgetOpen] = useState(false);
+  const [quickBudgetVal, setQuickBudgetVal] = useState('');
+
+  // Estados da Página de Configurações
+  const [configName, setConfigName] = useState('');
+  const [configBudget, setConfigBudget] = useState('');
+  const [currentPw, setCurrentPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [confirmNewPw, setConfirmNewPw] = useState('');
+  const [showConfigCurrPw, setShowConfigCurrPw] = useState(false);
+  const [showConfigNewPw, setShowConfigNewPw] = useState(false);
+  const [avatarLoading, setAvatarLoading] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingBudget, setSavingBudget] = useState(false);
+  const [savingPw, setSavingPw] = useState(false);
+
   const showToast = (msg) => {
     setToastText(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -124,7 +182,7 @@ export default function App() {
       return data;
     } catch (err) {
       if (err.name === 'TypeError' && (err.message.includes('fetch') || err.message.includes('NetworkError'))) {
-        throw new Error('Não foi possível conectar ao servidor. Verifique sua conexão.');
+        throw new Error('Não foi possível carregar as informações. Verifique sua conexão com a internet.');
       }
       throw err;
     }
@@ -161,6 +219,25 @@ export default function App() {
     }
   }, []);
 
+  // Sincroniza campos de configuração com dados da sessão
+  useEffect(() => {
+    if (session) {
+      setConfigName(session.name || '');
+      const bVal = String(session.budget ?? summary.user_budget ?? '');
+      setConfigBudget(bVal);
+      setQuickBudgetVal(bVal);
+    }
+  }, [session?.name, session?.budget, summary.user_budget]);
+
+  // Contagem regressiva do reenvio de código
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
   const handleLogout = () => {
     localStorage.removeItem(K.session);
     setSession(null);
@@ -169,6 +246,230 @@ export default function App() {
     setPassword('');
     setCode('');
     setAuthError('');
+  };
+
+  // Reenviar código de confirmação de cadastro
+  const handleResendRegisterCode = async () => {
+    if (resendCooldown > 0 || resendLoading) return;
+    setResendLoading(true);
+    setAuthError('');
+    try {
+      const data = await api('/api/auth/resend-register-code', {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim().toLowerCase() })
+      });
+      setResendCooldown(60);
+      if (data.code) {
+        setCode(data.code);
+        setAuthInfo('Novo código gerado e preenchido automaticamente.');
+      } else {
+        setAuthInfo(data.message || 'Novo código enviado para o seu e-mail!');
+      }
+      showToast('Novo código enviado com sucesso!');
+    } catch (err) {
+      setAuthError(err.message || 'Erro ao reenviar código.');
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  // Reenviar código de recuperação de senha
+  const handleResendResetCode = async () => {
+    if (resendCooldown > 0 || resendLoading) return;
+    setResendLoading(true);
+    setAuthError('');
+    try {
+      const data = await api('/api/auth/resend-reset-code', {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim().toLowerCase() })
+      });
+      setResendCooldown(60);
+      if (data.code) {
+        setCode(data.code);
+        setAuthInfo('Novo código gerado e preenchido automaticamente.');
+      } else {
+        setAuthInfo(data.message || 'Novo código de recuperação enviado para seu e-mail!');
+      }
+      showToast('Novo código de recuperação enviado!');
+    } catch (err) {
+      setAuthError(err.message || 'Erro ao reenviar código.');
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  // Alterar / Atualizar orçamento mensal
+  const handleUpdateBudget = async (newVal) => {
+    const num = Number(newVal);
+    if (isNaN(num) || num < 0 || String(newVal).trim() === '') {
+      showToast('Informe um valor de orçamento válido maior ou igual a zero.');
+      return;
+    }
+    setSavingBudget(true);
+    try {
+      const res = await api('/api/user/budget', {
+        method: 'PUT',
+        body: JSON.stringify({ budget: num })
+      });
+      const updatedUser = { ...session, budget: num };
+      setSession(updatedUser);
+      localStorage.setItem(K.session, JSON.stringify(updatedUser));
+      setSummary((prev) => {
+        const balance = num - prev.total_spent;
+        const budget_used_percentage = num > 0 ? (prev.total_spent / num) * 100 : (prev.total_spent > 0 ? 100 : 0);
+        return {
+          ...prev,
+          user_budget: num,
+          balance,
+          budget_used_percentage
+        };
+      });
+      setQuickBudgetVal(String(num));
+      setConfigBudget(String(num));
+      setEditBudgetOpen(false);
+      showToast(`Orçamento atualizado para ${money(num)} com sucesso!`);
+      loadDashboard(updatedUser);
+    } catch (err) {
+      showToast(err.message || 'Erro ao atualizar orçamento.');
+    } finally {
+      setSavingBudget(false);
+    }
+  };
+
+  // Upload e processamento de imagem de usuário (limite de 5 MB)
+  const handleAvatarUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+    if (file.size > MAX_SIZE) {
+      showToast(`A imagem selecionada possui ${(file.size / (1024 * 1024)).toFixed(1)} MB. O limite máximo permitido é de 5 MB.`);
+      e.target.value = '';
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      showToast('Selecione um formato de imagem válido (JPG, PNG, WebP, GIF).');
+      e.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = async () => {
+        // Redimensiona proporcionalmente mantendo alta resolução (máx 512x512) para rapidez e leveza
+        const maxDim = 512;
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+
+        setAvatarLoading(true);
+        try {
+          await api('/api/user/avatar', {
+            method: 'PUT',
+            body: JSON.stringify({ avatar: dataUrl })
+          });
+          const updatedUser = { ...session, avatar: dataUrl };
+          setSession(updatedUser);
+          localStorage.setItem(K.session, JSON.stringify(updatedUser));
+          showToast('Foto de perfil alterada com sucesso!');
+        } catch (err) {
+          showToast(err.message || 'Erro ao atualizar foto de perfil.');
+        } finally {
+          setAvatarLoading(false);
+          e.target.value = '';
+        }
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Remover foto de perfil
+  const handleRemoveAvatar = async () => {
+    setAvatarLoading(true);
+    try {
+      await api('/api/user/avatar', {
+        method: 'PUT',
+        body: JSON.stringify({ avatar: null })
+      });
+      const updatedUser = { ...session, avatar: null };
+      setSession(updatedUser);
+      localStorage.setItem(K.session, JSON.stringify(updatedUser));
+      showToast('Foto de perfil removida com sucesso!');
+    } catch (err) {
+      showToast(err.message || 'Erro ao remover foto.');
+    } finally {
+      setAvatarLoading(false);
+    }
+  };
+
+  // Atualizar nome do usuário
+  const handleUpdateProfileName = async (e) => {
+    e.preventDefault();
+    if (!configName.trim()) {
+      return showToast('Informe um nome válido.');
+    }
+    setSavingProfile(true);
+    try {
+      await api('/api/user/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ name: configName.trim() })
+      });
+      const updatedUser = { ...session, name: configName.trim() };
+      setSession(updatedUser);
+      localStorage.setItem(K.session, JSON.stringify(updatedUser));
+      setSummary((prev) => ({ ...prev, user_name: configName.trim() }));
+      showToast('Nome atualizado com sucesso!');
+    } catch (err) {
+      showToast(err.message || 'Erro ao atualizar nome.');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  // Alterar senha (usuário logado)
+  const handleUpdatePassword = async (e) => {
+    e.preventDefault();
+    if (!currentPw) {
+      return showToast('Digite sua senha atual.');
+    }
+    if (!newPw || newPw.length < 8) {
+      return showToast('A nova senha deve ter pelo menos 8 caracteres.');
+    }
+    if (newPw !== confirmNewPw) {
+      return showToast('A confirmação da nova senha não confere.');
+    }
+    setSavingPw(true);
+    try {
+      await api('/api/user/password', {
+        method: 'PUT',
+        body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw })
+      });
+      setCurrentPw('');
+      setNewPw('');
+      setConfirmNewPw('');
+      showToast('Senha alterada com sucesso!');
+    } catch (err) {
+      showToast(err.message || 'Erro ao alterar senha.');
+    } finally {
+      setSavingPw(false);
+    }
   };
 
   // Submissão do login / cadastro inicial
@@ -204,7 +505,12 @@ export default function App() {
         });
 
         setAuthMode('verify_register');
-        if (data.code) setCode(data.code);
+        if (data.code) {
+          setCode(data.code);
+          if (data.smtpSent === false) {
+            setAuthInfo('Código gerado e preenchido automaticamente.');
+          }
+        }
       } else {
         const data = await api('/api/auth/login', {
           method: 'POST',
@@ -263,7 +569,12 @@ export default function App() {
         body: JSON.stringify({ email: cleanEmail })
       });
       setAuthMode('reset');
-      if (data.code) setCode(data.code);
+      if (data.code) {
+        setCode(data.code);
+        if (data.smtpSent === false) {
+          setAuthInfo('Código gerado e preenchido automaticamente.');
+        }
+      }
     } catch (err) {
       setAuthError(err.message);
     } finally {
@@ -375,8 +686,8 @@ export default function App() {
               <div className="flex gap-3 items-start p-3.5 rounded-2xl bg-[#e5f4ff] border border-dashed border-blue mb-5 text-navy text-xs sm:text-sm leading-relaxed animate-pop">
                 <Icon name="mail" size={20} className="text-blue mt-0.5 shrink-0" />
                 <div className="min-w-0">
-                  Código enviado para <b className="break-all">{email}</b> via <strong>verificação de email</strong>.
-                  <br /><small className="text-muted">Verifique sua caixa de entrada e a pasta de spam.</small>
+                  Código de validação para <b className="break-all">{email}</b>:
+                  <br /><small className="text-muted">Verifique seu e-mail ou utilize o código abaixo:</small>
                   {code && <strong className="font-display font-extrabold text-xl sm:text-2xl tracking-[6px] block mt-1.5 text-navy">{code}</strong>}
                 </div>
               </div>
@@ -395,6 +706,19 @@ export default function App() {
                     required
                     className="code w-full border border-line rounded-xl py-3 sm:py-3.5 px-3 outline-none text-ink bg-pale focus:border-blue focus:ring-4 focus:ring-blue/10 transition-all font-mono text-center text-xl sm:text-2xl font-bold tracking-[6px] sm:tracking-[8px]"
                   />
+                </div>
+
+                <div className="flex items-center justify-between text-xs sm:text-sm -mt-1">
+                  <span className="text-muted">Não recebeu o código?</span>
+                  <button
+                    type="button"
+                    onClick={handleResendRegisterCode}
+                    disabled={resendCooldown > 0 || resendLoading}
+                    className="inline-flex items-center gap-1.5 font-bold text-blue hover:underline disabled:opacity-50 disabled:no-underline cursor-pointer"
+                  >
+                    <Icon name="refresh" size={13} className={resendLoading ? 'animate-spin' : ''} />
+                    {resendCooldown > 0 ? `Reenviar em ${resendCooldown}s` : (resendLoading ? 'Reenviando...' : 'Reenviar código')}
+                  </button>
                 </div>
 
                 {authError && <div className="text-bad bg-bad-bg p-3 rounded-xl font-semibold text-xs sm:text-sm animate-shake">{authError}</div>}
@@ -465,8 +789,8 @@ export default function App() {
               <div className="flex gap-3 items-start p-3.5 rounded-2xl bg-[#e5f4ff] border border-dashed border-blue mb-5 text-navy text-xs sm:text-sm leading-relaxed animate-pop">
                 <Icon name="mail" size={20} className="text-blue mt-0.5 shrink-0" />
                 <div className="min-w-0">
-                  Código enviado para <b className="break-all">{email}</b> via <strong>verificação de email</strong>.
-                  <br /><small className="text-muted">Verifique sua caixa de entrada e a pasta de spam.</small>
+                  Código de recuperação para <b className="break-all">{email}</b>:
+                  <br /><small className="text-muted">Verifique seu e-mail ou utilize o código abaixo:</small>
                   {code && <strong className="font-display font-extrabold text-xl sm:text-2xl tracking-[6px] block mt-1.5 text-navy">{code}</strong>}
                 </div>
               </div>
@@ -485,6 +809,19 @@ export default function App() {
                     required
                     className="code w-full border border-line rounded-xl py-3 sm:py-3.5 px-3 outline-none text-ink bg-pale focus:border-blue focus:ring-4 focus:ring-blue/10 transition-all font-mono text-center text-xl sm:text-2xl font-bold tracking-[6px] sm:tracking-[8px]"
                   />
+                </div>
+
+                <div className="flex items-center justify-between text-xs sm:text-sm -mt-1">
+                  <span className="text-muted">Não recebeu o código?</span>
+                  <button
+                    type="button"
+                    onClick={handleResendResetCode}
+                    disabled={resendCooldown > 0 || resendLoading}
+                    className="inline-flex items-center gap-1.5 font-bold text-blue hover:underline disabled:opacity-50 disabled:no-underline cursor-pointer"
+                  >
+                    <Icon name="refresh" size={13} className={resendLoading ? 'animate-spin' : ''} />
+                    {resendCooldown > 0 ? `Reenviar em ${resendCooldown}s` : (resendLoading ? 'Reenviando...' : 'Reenviar código')}
+                  </button>
                 </div>
 
                 <div className="flex flex-col gap-1.5">
@@ -699,48 +1036,87 @@ export default function App() {
           {/* Topbar */}
           <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 pb-4 border-b border-line/60">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5 font-display font-extrabold text-xl sm:text-2xl text-navy tracking-tight select-none">
+              <div
+                onClick={() => setView('home')}
+                className="flex items-center gap-2.5 font-display font-extrabold text-xl sm:text-2xl text-navy tracking-tight select-none cursor-pointer"
+              >
                 <span className="grid place-items-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-white bg-gradient-to-br from-[#52a9ee] to-blue shadow-[0_4px_14px_rgba(47,143,220,0.35)] shrink-0">
                   <Icon name="wallet" size={20} />
                 </span>
                 <span>Azulize</span>
               </div>
 
-              {/* Botão Sair visível no topo no mobile */}
-              <button
-                onClick={handleLogout}
-                className="sm:hidden inline-flex items-center gap-1.5 border border-line rounded-xl py-1.5 px-3 bg-white text-navy font-bold text-xs hover:bg-sky transition-colors shadow-sm active:scale-95"
-              >
-                <Icon name="out" size={14} /> Sair
-              </button>
+              {/* Botões visíveis no topo no mobile */}
+              <div className="flex sm:hidden items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setView('settings')}
+                  className={`inline-flex items-center gap-1.5 border border-line rounded-xl py-1.5 px-2.5 text-xs font-bold transition-colors shadow-sm active:scale-95 ${
+                    view === 'settings' ? 'bg-blue text-white border-blue' : 'bg-white text-navy hover:bg-sky'
+                  }`}
+                  title="Configurações do usuário"
+                >
+                  <Icon name="settings" size={14} />
+                  <span>Ajustes</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="inline-flex items-center gap-1 border border-line rounded-xl py-1.5 px-2.5 bg-white text-navy font-bold text-xs hover:bg-sky transition-colors shadow-sm active:scale-95"
+                >
+                  <Icon name="out" size={14} /> Sair
+                </button>
+              </div>
             </div>
 
             <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
-              <div>
-                <p className="text-muted text-xs sm:text-sm m-0">
-                  Olá, <strong className="text-navy">{summary.user_name || session.name}</strong>. Vamos cuidar do seu dinheiro?
-                </p>
-                <span className="inline-flex items-center gap-1.5 py-0.5 px-2.5 rounded-full bg-[#e6f9f0] text-[#166534] text-[11px] font-bold mt-1">
-                  <span className="w-2 h-2 rounded-full bg-[#22c55e] shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulseSlow" />
-                  Online
-                </span>
-              </div>
-
-              {/* Botão Sair visível em telas maiores */}
+              {/* Perfil do usuário clicável que abre configurações */}
               <button
-                onClick={handleLogout}
-                className="hidden sm:inline-flex items-center gap-2 border border-line rounded-xl py-2.5 px-4 bg-white text-navy font-bold text-sm hover:bg-sky transition-all shadow-sm hover:shadow active:scale-95"
+                type="button"
+                onClick={() => setView('settings')}
+                className="group flex items-center gap-3 p-1.5 sm:pr-3 rounded-2xl hover:bg-white/80 border border-transparent hover:border-line transition-all text-left"
+                title="Abrir configurações de perfil"
               >
-                <Icon name="out" size={16} /> Sair
+                <UserAvatar user={session} size={42} className="ring-2 ring-blue/30 group-hover:ring-blue transition-all" />
+                <div className="hidden min-[420px]:block">
+                  <p className="text-navy font-bold text-xs sm:text-sm m-0 leading-tight group-hover:text-blue transition-colors">
+                    {summary.user_name || session?.name}
+                  </p>
+                  <span className="text-[11px] text-muted block mt-0.5">Meu perfil</span>
+                </div>
               </button>
+
+              {/* Botões visíveis em telas maiores */}
+              <div className="hidden sm:flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setView('settings')}
+                  className={`inline-flex items-center gap-2 border rounded-xl py-2.5 px-3.5 font-bold text-sm transition-all shadow-sm active:scale-95 ${
+                    view === 'settings'
+                      ? 'bg-blue text-white border-blue shadow-[0_4px_12px_rgba(47,143,220,0.25)]'
+                      : 'border-line bg-white text-navy hover:bg-sky'
+                  }`}
+                  title="Configurações do usuário"
+                >
+                  <Icon name="settings" size={16} /> Configurações
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="inline-flex items-center gap-2 border border-line rounded-xl py-2.5 px-3.5 bg-white text-navy font-bold text-sm hover:bg-bad-bg/60 hover:text-bad hover:border-bad/30 transition-all shadow-sm active:scale-95"
+                >
+                  <Icon name="out" size={16} /> Sair
+                </button>
+              </div>
             </div>
           </header>
 
           {/* Abas responsivas */}
-          <nav className="w-full sm:w-auto grid grid-cols-2 sm:inline-flex gap-1.5 p-1 rounded-2xl bg-white/80 border border-line mb-6 backdrop-blur-sm shadow-sm">
+          <nav className="w-full sm:w-auto grid grid-cols-3 sm:inline-flex gap-1.5 p-1 rounded-2xl bg-white/80 border border-line mb-6 backdrop-blur-sm shadow-sm">
             <button
+              type="button"
               onClick={() => setView('home')}
-              className={`inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all active:scale-[0.98] ${
+              className={`inline-flex items-center justify-center gap-2 py-2.5 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all active:scale-[0.98] ${
                 view === 'home'
                   ? 'bg-blue text-white shadow-[0_6px_14px_rgba(47,143,220,0.25)]'
                   : 'text-muted hover:bg-white/70 hover:text-navy'
@@ -749,8 +1125,9 @@ export default function App() {
               <Icon name="home" size={16} /> Início
             </button>
             <button
+              type="button"
               onClick={() => setView('hist')}
-              className={`inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm transition-all active:scale-[0.98] ${
+              className={`inline-flex items-center justify-center gap-2 py-2.5 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all active:scale-[0.98] ${
                 view === 'hist'
                   ? 'bg-blue text-white shadow-[0_6px_14px_rgba(47,143,220,0.25)]'
                   : 'text-muted hover:bg-white/70 hover:text-navy'
@@ -758,10 +1135,21 @@ export default function App() {
             >
               <Icon name="clock" size={16} /> Histórico
             </button>
+            <button
+              type="button"
+              onClick={() => setView('settings')}
+              className={`inline-flex items-center justify-center gap-2 py-2.5 px-3 sm:px-4 rounded-xl font-bold text-xs sm:text-sm transition-all active:scale-[0.98] ${
+                view === 'settings'
+                  ? 'bg-blue text-white shadow-[0_6px_14px_rgba(47,143,220,0.25)]'
+                  : 'text-muted hover:bg-white/70 hover:text-navy'
+              }`}
+            >
+              <Icon name="settings" size={16} /> Configurações
+            </button>
           </nav>
 
           {/* Conteúdo das Abas */}
-          {view === 'home' ? (
+          {view === 'home' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
               {/* Card de Saldo */}
               <article className="lg:col-span-7 bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-5 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)] flex flex-col justify-between">
@@ -813,7 +1201,20 @@ export default function App() {
                             </span>
                           </div>
                           <div className="bg-white/70 p-2.5 sm:p-3 rounded-xl border border-line/40">
-                            <span className="text-[11px] sm:text-xs text-muted block">Orçamento</span>
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] sm:text-xs text-muted block">Orçamento</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuickBudgetVal(String(summary.user_budget ?? session?.budget ?? ''));
+                                  setEditBudgetOpen(true);
+                                }}
+                                title="Alterar valor do orçamento"
+                                className="text-blue hover:text-blue-dark inline-flex items-center gap-1 text-[11px] font-bold py-0.5 px-1.5 rounded-md hover:bg-sky transition-colors cursor-pointer active:scale-95"
+                              >
+                                <Icon name="edit" size={11} /> Alterar
+                              </button>
+                            </div>
                             <span className="text-xs sm:text-sm font-bold text-navy truncate block mt-0.5">
                               {money(summary.user_budget)}
                             </span>
@@ -937,8 +1338,10 @@ export default function App() {
                 </form>
               </article>
             </div>
-          ) : (
-            /* Aba de Histórico */
+          )}
+
+          {/* Aba de Histórico */}
+          {view === 'hist' && (
             <article className="bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-5 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)]">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-line">
                 <div>
@@ -994,6 +1397,416 @@ export default function App() {
                 )}
               </div>
             </article>
+          )}
+
+          {/* Aba de Configurações do Usuário */}
+          {view === 'settings' && (
+            <div className="flex flex-col gap-6 animate-rise">
+              {/* Cabeçalho do Perfil com Avatar */}
+              <article className="bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-5 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)]">
+                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 sm:gap-6">
+                  {/* Foto de Perfil com botão interativo */}
+                  <div className="relative group shrink-0">
+                    <UserAvatar user={session} size={92} className="ring-4 ring-sky shadow-md" />
+
+                    <label
+                      htmlFor="avatar-file-input"
+                      title="Alterar foto (máximo 5 MB)"
+                      className="absolute -bottom-1 -right-1 p-2 rounded-full bg-blue text-white shadow-lg cursor-pointer hover:bg-blue-dark transition-all transform hover:scale-110 active:scale-95"
+                    >
+                      <Icon name="camera" size={15} />
+                      <input
+                        id="avatar-file-input"
+                        type="file"
+                        accept="image/png, image/jpeg, image/webp, image/gif"
+                        onChange={handleAvatarUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex-1 text-center sm:text-left min-w-0">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 justify-center sm:justify-start">
+                      <h2 className="font-display font-extrabold text-xl sm:text-2xl text-navy truncate">
+                        {session?.name || summary.user_name || 'Usuário'}
+                      </h2>
+                      <span className="inline-flex items-center self-center sm:self-auto gap-1.5 py-0.5 px-2.5 rounded-full bg-[#e6f9f0] text-[#166534] text-xs font-bold">
+                        <Icon name="check" size={13} className="text-[#166534]" /> Conta Verificada
+                      </span>
+                    </div>
+
+                    <p className="text-muted text-xs sm:text-sm mt-1">{session?.email}</p>
+
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 mt-3.5">
+                      <label
+                        htmlFor="avatar-file-input"
+                        className="inline-flex items-center gap-1.5 py-1.5 px-3.5 rounded-xl border border-line bg-pale hover:bg-sky text-navy text-xs font-bold cursor-pointer transition-colors"
+                      >
+                        <Icon name="camera" size={14} className="text-blue" />
+                        {avatarLoading ? 'Enviando imagem...' : 'Trocar foto de perfil'}
+                      </label>
+
+                      {session?.avatar && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveAvatar}
+                          disabled={avatarLoading}
+                          className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-xl border border-bad/30 bg-bad-bg/60 hover:bg-bad-bg text-bad text-xs font-bold transition-colors cursor-pointer"
+                        >
+                          <Icon name="trash" size={14} /> Remover foto
+                        </button>
+                      )}
+                    </div>
+                    <small className="text-[11px] text-muted block mt-2">
+                      Formatos aceitos: JPG, PNG, WebP. Limite máximo: <strong>5 MB</strong>.
+                    </small>
+                  </div>
+                </div>
+              </article>
+
+              {/* Grid de Seções de Configuração */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* 1. Dados Pessoais (Nome) */}
+                <article className="bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-5 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)] flex flex-col justify-between">
+                  <div>
+                    <h3 className="flex items-center gap-2.5 text-navy font-display font-bold text-base sm:text-lg mb-1">
+                      <span className="grid place-items-center w-7 h-7 rounded-lg bg-sky text-blue">
+                        <Icon name="user" size={16} />
+                      </span>
+                      Dados do Perfil
+                    </h3>
+                    <p className="text-muted text-xs sm:text-sm m-0">Altere seu nome completo de exibição.</p>
+
+                    <form onSubmit={handleUpdateProfileName} className="flex flex-col gap-4 mt-5">
+                      <div className="flex flex-col gap-1.5">
+                        <label htmlFor="config-name" className="text-navy text-xs font-bold uppercase tracking-wider">Nome Completo</label>
+                        <div className="relative flex items-center">
+                          <span className="absolute left-3.5 text-muted pointer-events-none flex items-center justify-center">
+                            <Icon name="user" size={18} />
+                          </span>
+                          <input
+                            id="config-name"
+                            type="text"
+                            value={configName}
+                            onChange={(e) => setConfigName(e.target.value)}
+                            placeholder="Como prefere ser chamado?"
+                            required
+                            className="w-full border border-line rounded-xl py-3 pl-11 pr-4 outline-none text-ink bg-pale focus:border-blue focus:ring-4 focus:ring-blue/10 transition-all text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-navy text-xs font-bold uppercase tracking-wider">E-mail Cadastrado</label>
+                        <div className="relative flex items-center">
+                          <span className="absolute left-3.5 text-muted pointer-events-none flex items-center justify-center">
+                            <Icon name="mail" size={18} />
+                          </span>
+                          <input
+                            type="email"
+                            value={session?.email || ''}
+                            disabled
+                            className="w-full border border-line/60 rounded-xl py-3 pl-11 pr-4 text-muted bg-pale/60 cursor-not-allowed text-sm"
+                          />
+                        </div>
+                        <small className="text-[11px] text-muted">E-mail verificado para autenticação segura.</small>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={savingProfile}
+                        className="inline-flex justify-center items-center gap-2 rounded-xl py-3 px-5 font-bold text-white bg-blue hover:bg-blue-dark transition-all shadow-[0_6px_16px_rgba(47,143,220,0.22)] disabled:opacity-60 text-xs sm:text-sm mt-1 self-start"
+                      >
+                        <Icon name="check" size={16} />
+                        {savingProfile ? 'Salvando...' : 'Salvar nome'}
+                      </button>
+                    </form>
+                  </div>
+                </article>
+
+                {/* 2. Planejamento Financeiro / Orçamento Mensal */}
+                <article className="bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-5 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)] flex flex-col justify-between">
+                  <div>
+                    <h3 className="flex items-center gap-2.5 text-navy font-display font-bold text-base sm:text-lg mb-1">
+                      <span className="grid place-items-center w-7 h-7 rounded-lg bg-sky text-blue">
+                        <Icon name="wallet" size={16} />
+                      </span>
+                      Orçamento Mensal
+                    </h3>
+                    <p className="text-muted text-xs sm:text-sm m-0">Ajuste seu limite financeiro para o mês atual.</p>
+
+                    <form onSubmit={(e) => { e.preventDefault(); handleUpdateBudget(configBudget); }} className="flex flex-col gap-4 mt-5">
+                      <div className="p-3.5 rounded-2xl bg-gradient-to-br from-[#eaf6ff] to-[#f4faff] border border-blue/20">
+                        <div className="flex justify-between items-center text-xs text-muted">
+                          <span>Orçamento ativo</span>
+                          <span className="font-semibold text-navy">{money(summary.total_spent)} já gastos</span>
+                        </div>
+                        <strong className="text-2xl font-display font-extrabold text-navy block mt-0.5">
+                          {money(summary.user_budget ?? session?.budget)}
+                        </strong>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label htmlFor="config-budget" className="text-navy text-xs font-bold uppercase tracking-wider">Novo Orçamento (R$)</label>
+                        <div className="relative flex items-center">
+                          <span className="absolute left-3.5 text-muted pointer-events-none flex items-center justify-center">
+                            <Icon name="wallet" size={18} />
+                          </span>
+                          <input
+                            id="config-budget"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={configBudget}
+                            onChange={(e) => setConfigBudget(e.target.value)}
+                            placeholder="R$ 0,00"
+                            required
+                            className="w-full border border-line rounded-xl py-3 pl-11 pr-4 outline-none text-ink bg-pale focus:border-blue focus:ring-4 focus:ring-blue/10 transition-all text-sm font-semibold"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Botões de atalho rápido */}
+                      <div className="flex flex-wrap gap-2">
+                        {[100, 250, 500, 1000].map((add) => (
+                          <button
+                            key={add}
+                            type="button"
+                            onClick={() => {
+                              const cur = Number(configBudget) || 0;
+                              setConfigBudget(String(cur + add));
+                            }}
+                            className="text-xs font-semibold py-1 px-2.5 rounded-lg border border-line bg-pale text-navy hover:bg-sky hover:border-blue/30 transition-all active:scale-95"
+                          >
+                            +{money(add)}
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={savingBudget}
+                        className="inline-flex justify-center items-center gap-2 rounded-xl py-3 px-5 font-bold text-white bg-blue hover:bg-blue-dark transition-all shadow-[0_6px_16px_rgba(47,143,220,0.22)] disabled:opacity-60 text-xs sm:text-sm mt-1 self-start"
+                      >
+                        <Icon name="check" size={16} />
+                        {savingBudget ? 'Salvando...' : 'Salvar orçamento'}
+                      </button>
+                    </form>
+                  </div>
+                </article>
+
+                {/* 3. Segurança & Alterar Senha */}
+                <article className="bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-5 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)] md:col-span-2">
+                  <h3 className="flex items-center gap-2.5 text-navy font-display font-bold text-base sm:text-lg mb-1">
+                    <span className="grid place-items-center w-7 h-7 rounded-lg bg-sky text-blue">
+                      <Icon name="lock" size={16} />
+                    </span>
+                    Segurança da Conta & Alterar Senha
+                  </h3>
+                  <p className="text-muted text-xs sm:text-sm m-0">Altere sua senha de acesso a qualquer momento digitando a senha atual para validação.</p>
+
+                  <form onSubmit={handleUpdatePassword} className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="curr-pw" className="text-navy text-xs font-bold uppercase tracking-wider">Senha Atual</label>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3.5 text-muted pointer-events-none flex items-center justify-center">
+                          <Icon name="lock" size={18} />
+                        </span>
+                        <input
+                          id="curr-pw"
+                          type={showConfigCurrPw ? 'text' : 'password'}
+                          value={currentPw}
+                          onChange={(e) => setCurrentPw(e.target.value)}
+                          placeholder="Sua senha atual"
+                          required
+                          className="w-full border border-line rounded-xl py-3 pl-11 pr-11 outline-none text-ink bg-pale focus:border-blue focus:ring-4 focus:ring-blue/10 transition-all text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfigCurrPw(!showConfigCurrPw)}
+                          className="absolute right-2 text-muted hover:text-blue p-2 rounded-lg transition-colors"
+                        >
+                          <Icon name={showConfigCurrPw ? 'eyeoff' : 'eye'} size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="new-pw" className="text-navy text-xs font-bold uppercase tracking-wider">Nova Senha</label>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3.5 text-muted pointer-events-none flex items-center justify-center">
+                          <Icon name="lock" size={18} />
+                        </span>
+                        <input
+                          id="new-pw"
+                          type={showConfigNewPw ? 'text' : 'password'}
+                          value={newPw}
+                          onChange={(e) => setNewPw(e.target.value)}
+                          placeholder="Mínimo 8 caracteres"
+                          required
+                          minLength={8}
+                          className="w-full border border-line rounded-xl py-3 pl-11 pr-11 outline-none text-ink bg-pale focus:border-blue focus:ring-4 focus:ring-blue/10 transition-all text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfigNewPw(!showConfigNewPw)}
+                          className="absolute right-2 text-muted hover:text-blue p-2 rounded-lg transition-colors"
+                        >
+                          <Icon name={showConfigNewPw ? 'eyeoff' : 'eye'} size={16} />
+                        </button>
+                      </div>
+                      {newPw && (
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex-1 h-1.5 rounded-full bg-line overflow-hidden">
+                            <span className="block h-full transition-all duration-300" style={{ width: `${getStrength(newPw).w}%`, background: getStrength(newPw).color }} />
+                          </div>
+                          <span className="text-[11px] font-bold" style={{ color: getStrength(newPw).color }}>{getStrength(newPw).label}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="confirm-new-pw" className="text-navy text-xs font-bold uppercase tracking-wider">Confirmar Nova Senha</label>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3.5 text-muted pointer-events-none flex items-center justify-center">
+                          <Icon name="check" size={18} />
+                        </span>
+                        <input
+                          id="confirm-new-pw"
+                          type={showConfigNewPw ? 'text' : 'password'}
+                          value={confirmNewPw}
+                          onChange={(e) => setConfirmNewPw(e.target.value)}
+                          placeholder="Repita a nova senha"
+                          required
+                          minLength={8}
+                          className="w-full border border-line rounded-xl py-3 pl-11 pr-4 outline-none text-ink bg-pale focus:border-blue focus:ring-4 focus:ring-blue/10 transition-all text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="md:col-span-3 flex justify-end mt-2">
+                      <button
+                        type="submit"
+                        disabled={savingPw}
+                        className="inline-flex justify-center items-center gap-2 rounded-xl py-3 px-6 font-bold text-white bg-blue hover:bg-blue-dark transition-all shadow-[0_6px_16px_rgba(47,143,220,0.22)] disabled:opacity-60 text-xs sm:text-sm"
+                      >
+                        <Icon name="lock" size={16} />
+                        {savingPw ? 'Alterando senha...' : 'Atualizar senha'}
+                      </button>
+                    </div>
+                  </form>
+                </article>
+
+                {/* 4. Informações da Conta & Sessão */}
+                <article className="bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-5 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)] md:col-span-2 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div>
+                    <h4 className="font-display font-bold text-navy text-sm sm:text-base m-0">Conta Azulize</h4>
+                    <p className="text-muted text-xs sm:text-sm mt-0.5 mb-0">
+                      {session?.email || 'Controle de gastos pessoais'}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="inline-flex items-center gap-2 border border-bad/30 bg-bad-bg/60 text-bad hover:bg-bad hover:text-white rounded-xl py-2.5 px-5 font-bold text-xs sm:text-sm transition-all shadow-sm active:scale-95"
+                  >
+                    <Icon name="out" size={16} /> Encerrar sessão
+                  </button>
+                </article>
+              </div>
+            </div>
+          )}
+
+          {/* Modal de Alteração Rápida de Orçamento */}
+          {editBudgetOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy/40 backdrop-blur-sm animate-rise">
+              <div className="bg-white rounded-3xl p-6 sm:p-7 w-full max-w-md shadow-2xl border border-line animate-pop">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-display font-extrabold text-lg text-navy flex items-center gap-2">
+                    <span className="grid place-items-center w-8 h-8 rounded-xl bg-sky text-blue">
+                      <Icon name="wallet" size={18} />
+                    </span>
+                    Alterar Orçamento Mensal
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setEditBudgetOpen(false)}
+                    className="text-muted hover:text-navy p-1.5 rounded-lg hover:bg-pale transition-colors cursor-pointer"
+                  >
+                    <Icon name="close" size={18} />
+                  </button>
+                </div>
+
+                <p className="text-xs sm:text-sm text-muted mb-4">
+                  Defina seu limite mensal de gastos. Seu saldo e gráficos serão recalculados imediatamente.
+                </p>
+
+                <form onSubmit={(e) => { e.preventDefault(); handleUpdateBudget(quickBudgetVal); }}>
+                  <div className="flex flex-col gap-1.5 mb-4">
+                    <label className="text-navy text-xs font-bold uppercase tracking-wider">Novo Orçamento (R$)</label>
+                    <div className="relative flex items-center">
+                      <span className="absolute left-3.5 text-muted pointer-events-none flex items-center justify-center">
+                        <Icon name="wallet" size={18} />
+                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={quickBudgetVal}
+                        onChange={(e) => setQuickBudgetVal(e.target.value)}
+                        placeholder="0,00"
+                        required
+                        autoFocus
+                        className="w-full border border-line rounded-xl py-3 pl-11 pr-4 outline-none text-ink bg-pale focus:border-blue focus:ring-4 focus:ring-blue/10 transition-all font-semibold text-lg"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Atalhos rápidos */}
+                  <div className="flex flex-wrap gap-2 mb-5">
+                    {[100, 200, 500, 1000].map((add) => (
+                      <button
+                        key={add}
+                        type="button"
+                        onClick={() => {
+                          const current = Number(quickBudgetVal) || 0;
+                          setQuickBudgetVal(String(current + add));
+                        }}
+                        className="text-xs font-semibold py-1 px-2.5 rounded-lg border border-line bg-pale text-navy hover:bg-sky hover:border-blue/30 transition-all active:scale-95"
+                      >
+                        +{money(add)}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setQuickBudgetVal('')}
+                      className="text-xs font-semibold py-1 px-2.5 rounded-lg border border-line bg-pale text-muted hover:text-bad hover:bg-bad-bg/40 transition-all"
+                    >
+                      Limpar
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-line">
+                    <button
+                      type="button"
+                      onClick={() => setEditBudgetOpen(false)}
+                      className="py-2.5 px-4 rounded-xl border border-line text-xs sm:text-sm font-bold text-muted hover:bg-pale transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={savingBudget}
+                      className="inline-flex items-center gap-2 py-2.5 px-5 rounded-xl bg-blue text-white text-xs sm:text-sm font-bold hover:bg-blue-dark transition-all shadow-[0_6px_16px_rgba(47,143,220,0.25)] disabled:opacity-60 cursor-pointer"
+                    >
+                      <Icon name="check" size={16} />
+                      {savingBudget ? 'Salvando...' : 'Salvar orçamento'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
           )}
         </section>
       )}

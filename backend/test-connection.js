@@ -24,7 +24,7 @@ async function testConnection() {
     const summary = await sql`SELECT * FROM vw_monthly_summary;`;
     console.log('\nResumo mensal (vw_monthly_summary):', summary);
   } catch (error) {
-    console.error('❌ Erro ao conectar ao Neon:', error.message);
+    console.error('Erro ao conectar ao Neon:', error.message);
   }
 }
 
