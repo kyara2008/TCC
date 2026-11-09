@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
+import TermsModal from './TermsModal';
 
-// Endereço base da API
-const API_BASE = (window.location.protocol.startsWith('http') && (window.location.port === '3000' || window.location.port === '5173'))
+// Endereço base da API (suporta localhost, Vite dev server e Vercel no mesmo domínio)
+const API_BASE = (typeof window !== 'undefined' && window.location && window.location.protocol.startsWith('http'))
   ? ''
   : 'http://localhost:3000';
 
@@ -39,7 +40,8 @@ const P = {
   filter: 'M22 3H2l8 9.46V19l4 2v-8.54L22 3z',
   search: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z',
   calendar: 'M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zM16 2v4M8 2v4M3 10h18',
-  tag: 'M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82zM7 7h.01'
+  tag: 'M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82zM7 7h.01',
+  fileText: 'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8'
 };
 
 function Icon({ name, size = 18, className = '' }) {
@@ -159,144 +161,65 @@ function Logo() {
   );
 }
 
-// Gráfico de Rosca / Donut Interativo (Gastos por Categoria)
-function CategoryDonutChart({ categories, total, activeCategory, onSelectCategory, onHoverCategory }) {
-  const size = 220;
-  const cx = 110;
-  const cy = 110;
-  const radius = 72;
-  const strokeWidth = 24;
-  const circumference = 2 * Math.PI * radius; // ~452.39
-
-  let accumulatedPercent = 0;
-
-  const currentDisplay = activeCategory
-    ? categories.find((c) => c.name === activeCategory)
-    : null;
-
-  return (
-    <div className="relative flex flex-col items-center justify-center">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible select-none">
-        {categories.length === 0 ? (
-          <circle
-            cx={cx}
-            cy={cy}
-            r={radius}
-            fill="none"
-            stroke="#e2e8f0"
-            strokeWidth={strokeWidth}
-          />
-        ) : (
-          categories.map((cat) => {
-            const pct = cat.percentage;
-            const sliceLength = (pct / 100) * circumference;
-            const gap = categories.length > 1 ? 3 : 0;
-            const dashLength = Math.max(0.1, sliceLength - gap);
-            const spaceLength = Math.max(0.1, circumference - dashLength);
-            const dashOffset = -(accumulatedPercent / 100) * circumference;
-            accumulatedPercent += pct;
-
-            const isSelected = activeCategory === cat.name;
-
-            return (
-              <circle
-                key={cat.name}
-                cx={cx}
-                cy={cy}
-                r={radius}
-                fill="none"
-                stroke={cat.config.color}
-                strokeWidth={isSelected ? strokeWidth + 6 : strokeWidth}
-                strokeDasharray={`${dashLength} ${spaceLength}`}
-                strokeDashoffset={dashOffset}
-                strokeLinecap="round"
-                transform={`rotate(-90 ${cx} ${cy})`}
-                className="transition-all duration-300 cursor-pointer hover:opacity-90"
-                style={{
-                  filter: isSelected ? 'drop-shadow(0 6px 12px rgba(0,0,0,0.18))' : 'none',
-                  transformOrigin: `${cx}px ${cy}px`
-                }}
-                onMouseEnter={() => onHoverCategory(cat.name)}
-                onMouseLeave={() => onHoverCategory(null)}
-                onClick={() => onSelectCategory(isSelected ? null : cat.name)}
-              />
-            );
-          })
-        )}
-      </svg>
-
-      {/* Conteúdo Central da Rosca */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4">
-        {currentDisplay ? (
-          <div className="animate-pop">
-            <span
-              className="text-[11px] font-bold uppercase tracking-wider block truncate max-w-[120px]"
-              style={{ color: currentDisplay.config.color }}
-            >
-              {currentDisplay.name}
-            </span>
-            <strong className="font-display font-extrabold text-navy text-base sm:text-lg block leading-tight mt-0.5">
-              {money(currentDisplay.total)}
-            </strong>
-            <span className="inline-block mt-0.5 text-[10px] font-bold py-0.5 px-2 rounded-full bg-slate-100 text-slate-700">
-              {currentDisplay.percentage.toFixed(1)}% do total
-            </span>
-          </div>
-        ) : (
-          <div>
-            <span className="text-muted text-[11px] uppercase tracking-wider font-semibold block">Total</span>
-            <strong className="font-display font-extrabold text-navy text-base sm:text-lg block leading-tight mt-0.5">
-              {money(total)}
-            </strong>
-            <span className="text-muted text-[11px] block mt-0.5">
-              {categories.length} {categories.length === 1 ? 'categoria' : 'categorias'}
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // Gráfico de Barras / Linha do Tempo (Gastos Diários)
 function SpendingBarChart({ data, onSelectDate, selectedDate }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
 
   if (!data || data.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-48 text-muted text-xs sm:text-sm">
-        <Icon name="chart" size={28} className="text-muted/40 mb-2" />
-        Nenhum gasto no período selecionado.
+      <div className="flex flex-col items-center justify-center min-h-[190px] border border-dashed border-line rounded-2xl p-6 text-center text-muted text-xs sm:text-sm">
+        <Icon name="chart" size={32} className="text-muted/40 mb-2" />
+        <b className="text-navy text-sm">Sem gastos registrados no período</b>
+        <span className="text-xs text-muted max-w-xs mt-0.5">
+          Os lançamentos diários aparecerão aqui automaticamente conforme você adicionar suas despesas.
+        </span>
       </div>
     );
   }
 
-  const width = 460;
-  const height = 190;
-  const padLeft = 46;
+  const width = 480;
+  const height = 200;
+  const padLeft = 48;
   const padRight = 16;
-  const padTop = 26;
+  const padTop = 32;
   const padBottom = 34;
 
   const chartW = width - padLeft - padRight;
   const chartH = height - padTop - padBottom;
 
-  const maxVal = Math.max(...data.map((d) => d.total), 10);
-  const slotW = chartW / data.length;
-  const barW = Math.max(12, Math.min(28, slotW * 0.62));
+  const rawMax = Math.max(...data.map((d) => d.total), 10);
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawMax)));
+  const normalized = rawMax / magnitude;
+  const niceMultiplier = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  const maxVal = Math.max(10, niceMultiplier * magnitude);
 
-  // 3 linhas guias: 0%, 50%, 100%
+  const slotW = chartW / data.length;
+  const barW = Math.max(8, Math.min(26, slotW * 0.52));
+
+  // 3 linhas guias horizontais: 100%, 50%, 0%
   const guideLines = [
     { val: maxVal, y: padTop },
     { val: maxVal / 2, y: padTop + chartH / 2 },
     { val: 0, y: padTop + chartH }
   ];
 
-  const hoveredItem = hoveredIndex !== null ? data[hoveredIndex] : null;
+  const activeIndex = hoveredIndex !== null
+    ? hoveredIndex
+    : selectedDate
+    ? data.findIndex((d) => d.dateKey === selectedDate)
+    : null;
+  const activeItem = activeIndex !== null && activeIndex !== -1 ? data[activeIndex] : null;
+
+  // Evita colisão de textos no eixo X quando houver muitos dias
+  const skipInterval = data.length > 10 ? 3 : data.length > 6 ? 2 : 1;
 
   return (
-    <div className="relative w-full">
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible select-none">
+    <div className="relative w-full overflow-hidden">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="w-full h-auto overflow-visible select-none"
+        preserveAspectRatio="xMidYMid meet"
+      >
         <defs>
           <linearGradient id="barBlueGradient" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#38bdf8" />
@@ -306,6 +229,13 @@ function SpendingBarChart({ data, onSelectDate, selectedDate }) {
             <stop offset="0%" stopColor="#60a5fa" />
             <stop offset="100%" stopColor="#1d4ed8" />
           </linearGradient>
+          <linearGradient id="barSelectedGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#f59e0b" />
+            <stop offset="100%" stopColor="#d97706" />
+          </linearGradient>
+          <filter id="barShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="4" stdDeviation="3" floodColor="#2563eb" floodOpacity="0.25" />
+          </filter>
         </defs>
 
         {/* Linhas guias horizontais */}
@@ -321,25 +251,28 @@ function SpendingBarChart({ data, onSelectDate, selectedDate }) {
               strokeWidth={idx === 2 ? 1.5 : 1}
             />
             <text
-              x={padLeft - 6}
-              y={g.y + 3}
+              x={padLeft - 8}
+              y={g.y + 3.5}
               textAnchor="end"
               fill="#94a3b8"
               fontSize="9"
               fontFamily="sans-serif"
+              fontWeight="500"
             >
-              {g.val >= 1000 ? `R$ ${(g.val / 1000).toFixed(0)}k` : `R$ ${Math.round(g.val)}`}
+              {g.val >= 1000 ? `R$ ${(g.val / 1000).toFixed(g.val % 1000 === 0 ? 0 : 1)}k` : `R$ ${Math.round(g.val)}`}
             </text>
           </g>
         ))}
 
         {/* Barras por dia */}
         {data.map((d, i) => {
-          const barH = Math.max(4, (d.total / maxVal) * chartH);
+          const ratio = Math.min(1, Math.max(0, d.total / maxVal));
+          const barH = d.total > 0 ? Math.max(6, ratio * chartH) : 0;
           const x = padLeft + (i + 0.5) * slotW - barW / 2;
           const y = padTop + chartH - barH;
           const isHovered = hoveredIndex === i;
           const isSelected = selectedDate === d.dateKey;
+          const shouldShowLabel = (i % skipInterval === 0) || (i === data.length - 1) || isSelected;
 
           return (
             <g
@@ -347,9 +280,10 @@ function SpendingBarChart({ data, onSelectDate, selectedDate }) {
               className="cursor-pointer"
               onMouseEnter={() => setHoveredIndex(i)}
               onMouseLeave={() => setHoveredIndex(null)}
+              onTouchStart={() => setHoveredIndex(i)}
               onClick={() => onSelectDate && onSelectDate(isSelected ? null : d.dateKey)}
             >
-              {/* Área invisível ampla para facilitar hover no mobile */}
+              {/* Área invisível ampla para facilitar clique no mobile */}
               <rect
                 x={padLeft + i * slotW}
                 y={padTop}
@@ -358,69 +292,109 @@ function SpendingBarChart({ data, onSelectDate, selectedDate }) {
                 fill="transparent"
               />
 
-              {/* Coluna / Barra */}
-              <rect
-                x={x}
-                y={y}
-                width={barW}
-                height={barH}
-                rx={5}
-                ry={5}
-                fill={isHovered || isSelected ? 'url(#barHoverGradient)' : 'url(#barBlueGradient)'}
-                className="transition-all duration-200"
-                style={{
-                  filter: isHovered || isSelected ? 'drop-shadow(0 4px 8px rgba(37,99,235,0.35))' : 'none'
-                }}
-              />
+              {/* Destaque de coluna em hover */}
+              {isHovered && (
+                <rect
+                  x={padLeft + i * slotW + 2}
+                  y={padTop}
+                  width={slotW - 4}
+                  height={chartH}
+                  rx={6}
+                  fill="#eaf6ff"
+                  opacity={0.6}
+                />
+              )}
+
+              {/* Coluna / Barra de Gasto */}
+              {d.total > 0 ? (
+                <rect
+                  x={x}
+                  y={y}
+                  width={barW}
+                  height={barH}
+                  rx={Math.min(barW / 2, 5)}
+                  ry={Math.min(barW / 2, 5)}
+                  fill={
+                    isSelected
+                      ? '#d97706'
+                      : isHovered
+                      ? '#1d4ed8'
+                      : '#2563eb'
+                  }
+                  className="transition-all duration-200"
+                  filter={isHovered || isSelected ? 'url(#barShadow)' : 'none'}
+                />
+              ) : (
+                <circle
+                  cx={padLeft + (i + 0.5) * slotW}
+                  cy={padTop + chartH - 3}
+                  r={2.5}
+                  fill="#cbd5e1"
+                />
+              )}
+
+              {/* Indicador de Seleção Ativa no topo da barra */}
+              {isSelected && (
+                <circle
+                  cx={padLeft + (i + 0.5) * slotW}
+                  cy={Math.max(padTop - 6, y - 6)}
+                  r={3.5}
+                  fill="#f59e0b"
+                />
+              )}
 
               {/* Rótulo de Data no Eixo X */}
-              <text
-                x={padLeft + (i + 0.5) * slotW}
-                y={padTop + chartH + 16}
-                textAnchor="middle"
-                fill={isSelected ? '#1d4ed8' : '#64748b'}
-                fontSize="10"
-                fontWeight={isSelected ? 'bold' : 'normal'}
-                fontFamily="sans-serif"
-              >
-                {d.label}
-              </text>
+              {shouldShowLabel && (
+                <text
+                  x={padLeft + (i + 0.5) * slotW}
+                  y={padTop + chartH + 16}
+                  textAnchor="middle"
+                  fill={isSelected ? '#d97706' : isHovered ? '#1d4ed8' : '#64748b'}
+                  fontSize={isSelected ? '10' : '9.5'}
+                  fontWeight={isSelected || isHovered ? '700' : '500'}
+                  fontFamily="sans-serif"
+                >
+                  {d.label}
+                </text>
+              )}
             </g>
           );
         })}
 
-        {/* Tooltip flutuante sobre a barra em hover */}
-        {hoveredItem && hoveredIndex !== null && (() => {
-          const slotCenter = padLeft + (hoveredIndex + 0.5) * slotW;
-          const barH = Math.max(4, (hoveredItem.total / maxVal) * chartH);
-          const tooltipY = Math.max(8, padTop + chartH - barH - 24);
-          const tooltipX = Math.max(60, Math.min(width - 60, slotCenter));
+        {/* Tooltip flutuante sobre a barra ativa */}
+        {activeItem && activeIndex !== null && (() => {
+          const slotCenter = padLeft + (activeIndex + 0.5) * slotW;
+          const ratio = Math.min(1, Math.max(0, activeItem.total / maxVal));
+          const barH = activeItem.total > 0 ? Math.max(6, ratio * chartH) : 0;
+          const tooltipY = Math.max(22, padTop + chartH - barH - 18);
+          const tooltipW = 104;
+          const tooltipX = Math.max(tooltipW / 2 + 6, Math.min(width - tooltipW / 2 - 6, slotCenter));
 
           return (
             <g className="pointer-events-none transition-all duration-150">
               <rect
-                x={tooltipX - 48}
-                y={tooltipY - 14}
-                width={96}
+                x={tooltipX - tooltipW / 2}
+                y={tooltipY - 16}
+                width={tooltipW}
                 height={26}
-                rx={6}
+                rx={7}
                 fill="#0f172a"
                 className="shadow-lg"
               />
               <polygon
-                points={`${tooltipX - 4},${tooltipY + 12} ${tooltipX + 4},${tooltipY + 12} ${tooltipX},${tooltipY + 16}`}
+                points={`${tooltipX - 4},${tooltipY + 10} ${tooltipX + 4},${tooltipY + 10} ${tooltipX},${tooltipY + 14}`}
                 fill="#0f172a"
               />
               <text
                 x={tooltipX}
-                y={tooltipY + 3}
+                y={tooltipY + 2}
                 textAnchor="middle"
                 fill="#ffffff"
                 fontSize="10"
-                fontWeight="bold"
+                fontWeight="700"
                 fontFamily="sans-serif"
               >
-                {money(hoveredItem.total)}
+                {money(activeItem.total)}
               </text>
             </g>
           );
@@ -452,6 +426,8 @@ export default function App() {
   const [budget, setBudget] = useState('');
   const [code, setCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
 
   // Estado do painel
   const [view, setView] = useState('home');
@@ -473,6 +449,7 @@ export default function App() {
   const [historyDateFilter, setHistoryDateFilter] = useState(null);
   const [historySearch, setHistorySearch] = useState('');
   const [hoveredCategory, setHoveredCategory] = useState(null);
+  const [histChartTab, setHistChartTab] = useState('categories'); // 'categories' | 'timeline'
 
   // Toast
   const [toastText, setToastText] = useState('');
@@ -505,15 +482,16 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToastText(''), 3500);
   };
 
-  // Filtros aplicados sobre a lista completa de gastos
-  const filteredExpenses = React.useMemo(() => {
+  // 1. Gastos filtrados pelo período (mês, 7d, 30d, todos) e busca textual
+  // Serve como base para os gráficos gerais manterem a visão do período completo
+  const periodExpenses = React.useMemo(() => {
     const nowTime = Date.now();
     const curDate = new Date();
     const curMonth = curDate.getMonth();
     const curYear = curDate.getFullYear();
 
     return expenses.filter((x) => {
-      // 1. Filtro de Período
+      // Filtro de Período
       if (historyPeriod !== 'all') {
         const ts = new Date(x.ts).getTime();
         if (historyPeriod === '7d' && ts < nowTime - 7 * 86400000) return false;
@@ -523,37 +501,48 @@ export default function App() {
           if (d.getMonth() !== curMonth || d.getFullYear() !== curYear) return false;
         }
       }
-      // 2. Filtro de Categoria
-      const cat = detectCategory(x.description, x.category);
-      if (historyCategoryFilter && cat !== historyCategoryFilter) return false;
-
-      // 3. Filtro de Data Diária
-      if (historyDateFilter) {
-        const d = new Date(x.ts);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        if (key !== historyDateFilter) return false;
-      }
-
-      // 4. Filtro de Busca Textual
+      // Filtro de Busca Textual
       if (historySearch.trim()) {
         const q = historySearch.trim().toLowerCase();
         if (!x.description.toLowerCase().includes(q)) return false;
       }
       return true;
     });
-  }, [expenses, historyPeriod, historyCategoryFilter, historyDateFilter, historySearch]);
+  }, [expenses, historyPeriod, historySearch]);
+
+  // 2. Gastos filtrados para a listagem detalhada (inclui filtros de categoria e dia selecionados)
+  const filteredExpenses = React.useMemo(() => {
+    return periodExpenses.filter((x) => {
+      // Filtro de Categoria
+      const cat = detectCategory(x.description, x.category);
+      if (historyCategoryFilter && cat !== historyCategoryFilter) return false;
+
+      // Filtro de Data Diária
+      if (historyDateFilter) {
+        const d = new Date(x.ts);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if (key !== historyDateFilter) return false;
+      }
+      return true;
+    });
+  }, [periodExpenses, historyCategoryFilter, historyDateFilter]);
+
+  const totalPeriod = React.useMemo(() => {
+    return periodExpenses.reduce((s, x) => s + x.value, 0);
+  }, [periodExpenses]);
 
   const totalFiltered = React.useMemo(() => {
     return filteredExpenses.reduce((s, x) => s + x.value, 0);
   }, [filteredExpenses]);
 
-  const avgExpense = filteredExpenses.length > 0 ? totalFiltered / filteredExpenses.length : 0;
-  const maxExpense = filteredExpenses.reduce((m, x) => (x.value > m.value ? x : m), { value: 0, description: '-' });
+  const avgExpense = periodExpenses.length > 0 ? totalPeriod / periodExpenses.length : 0;
+  const maxExpense = periodExpenses.reduce((m, x) => (x.value > m.value ? x : m), { value: 0, description: '-' });
 
-  // Agrupamento por Categorias para o Gráfico de Rosca
+  // 3. Agrupamento por Categorias para o Gráfico de Rosca
+  // Utiliza periodExpenses para que todas as categorias permaneçam visíveis ao selecionar uma fatia
   const categoryStats = React.useMemo(() => {
     const map = {};
-    for (const exp of filteredExpenses) {
+    for (const exp of periodExpenses) {
       const cat = detectCategory(exp.description, exp.category);
       if (!map[cat]) {
         map[cat] = { name: cat, total: 0, count: 0 };
@@ -561,7 +550,7 @@ export default function App() {
       map[cat].total += exp.value;
       map[cat].count += 1;
     }
-    const tot = filteredExpenses.reduce((s, x) => s + x.value, 0);
+    const tot = periodExpenses.reduce((s, x) => s + x.value, 0);
     return Object.values(map)
       .map((c) => ({
         ...c,
@@ -569,14 +558,19 @@ export default function App() {
         config: CATEGORY_CONFIG[c.name] || CATEGORY_CONFIG['Outros']
       }))
       .sort((a, b) => b.total - a.total);
-  }, [filteredExpenses]);
+  }, [periodExpenses]);
 
   const topCategory = categoryStats[0] || null;
 
-  // Agrupamento Diário para o Gráfico de Barras / Linha do Tempo
+  // 4. Agrupamento Diário para o Gráfico de Barras / Linha do Tempo
+  // Gera uma linha do tempo equilibrada (7 a 14 dias) mantendo os dias visíveis mesmo com filtro
   const timelineStats = React.useMemo(() => {
     const map = {};
-    for (const exp of filteredExpenses) {
+    const source = historyCategoryFilter
+      ? periodExpenses.filter((x) => detectCategory(x.description, x.category) === historyCategoryFilter)
+      : periodExpenses;
+
+    for (const exp of source) {
       const d = new Date(exp.ts);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       if (!map[key]) {
@@ -585,17 +579,108 @@ export default function App() {
       map[key].total += exp.value;
       map[key].count += 1;
     }
-    const sorted = Object.values(map).sort((a, b) => a.dateKey.localeCompare(b.dateKey));
-    return sorted.slice(-14).map((item) => {
-      const day = String(item.date.getDate()).padStart(2, '0');
-      const month = String(item.date.getMonth() + 1).padStart(2, '0');
-      return {
+
+    const sortedDates = Object.keys(map).sort();
+    if (sortedDates.length === 0) return [];
+
+    // Se houver datas com gastos, gera um intervalo contínuo de 7 a 12 dias para preencher a tela de forma estética
+    const latestDate = new Date(sortedDates[sortedDates.length - 1]);
+    const numDays = Math.min(12, Math.max(7, sortedDates.length));
+    const result = [];
+
+    for (let i = numDays - 1; i >= 0; i--) {
+      const target = new Date(latestDate);
+      target.setDate(target.getDate() - i);
+      const key = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`;
+      const day = String(target.getDate()).padStart(2, '0');
+      const month = String(target.getMonth() + 1).padStart(2, '0');
+      const item = map[key] || { dateKey: key, date: target, total: 0, count: 0 };
+      result.push({
         ...item,
+        dateKey: key,
+        date: target,
+        day,
         label: `${day}/${month}`,
-        fullDate: item.date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
-      };
+        fullDate: target.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+      });
+    }
+
+    return result;
+  }, [periodExpenses, historyCategoryFilter]);
+
+  // 5. Estatísticas para a tela Inicial (Home)
+  // Se o mês atual tiver gastos, usa o mês atual. Se ainda não tiver, exibe os lançamentos mais recentes
+  // para que o gráfico NUNCA fique vazio se o usuário já tiver dados no sistema.
+  const { homeCategoryStats, homeTimelineStats, homeTotalAmount, homeIsCurrentMonth } = React.useMemo(() => {
+    const curDate = new Date();
+    const curMonth = curDate.getMonth();
+    const curYear = curDate.getFullYear();
+
+    let targetExpenses = expenses.filter((x) => {
+      const d = new Date(x.ts);
+      return d.getMonth() === curMonth && d.getFullYear() === curYear;
     });
-  }, [filteredExpenses]);
+
+    const isCurrent = targetExpenses.length > 0;
+    if (!isCurrent && expenses.length > 0) {
+      targetExpenses = expenses;
+    }
+
+    const catMap = {};
+    for (const exp of targetExpenses) {
+      const cat = detectCategory(exp.description, exp.category);
+      if (!catMap[cat]) catMap[cat] = { name: cat, total: 0, count: 0 };
+      catMap[cat].total += exp.value;
+      catMap[cat].count += 1;
+    }
+    const tot = targetExpenses.reduce((s, x) => s + x.value, 0);
+    const catStats = Object.values(catMap)
+      .map((c) => ({
+        ...c,
+        percentage: tot > 0 ? (c.total / tot) * 100 : 0,
+        config: CATEGORY_CONFIG[c.name] || CATEGORY_CONFIG['Outros']
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const dateMap = {};
+    for (const exp of targetExpenses) {
+      const d = new Date(exp.ts);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      if (!dateMap[key]) dateMap[key] = { dateKey: key, date: d, total: 0, count: 0 };
+      dateMap[key].total += exp.value;
+      dateMap[key].count += 1;
+    }
+
+    const sortedDates = Object.keys(dateMap).sort();
+    let timeStats = [];
+    if (sortedDates.length > 0) {
+      const latestDate = new Date(sortedDates[sortedDates.length - 1]);
+      const daysCount = Math.min(10, Math.max(7, sortedDates.length));
+      for (let i = daysCount - 1; i >= 0; i--) {
+        const target = new Date(latestDate);
+        target.setDate(target.getDate() - i);
+        const key = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`;
+        const day = String(target.getDate()).padStart(2, '0');
+        const month = String(target.getMonth() + 1).padStart(2, '0');
+        const item = dateMap[key] || { dateKey: key, date: target, total: 0, count: 0 };
+        timeStats.push({
+          ...item,
+          dateKey: key,
+          date: target,
+          day,
+          label: `${day}/${month}`,
+          fullDate: target.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+        });
+      }
+    }
+
+    return {
+      homeCategoryStats: catStats,
+      homeTimelineStats: timeStats,
+      homeTotalAmount: tot,
+      homeIsCurrentMonth: isCurrent
+    };
+  }, [expenses]);
 
   const api = async (path, options = {}) => {
     const url = `${API_BASE}${path}`;
@@ -930,10 +1015,14 @@ export default function App() {
           setLoading(false);
           return setAuthError('Informe um orçamento mensal válido.');
         }
+        if (!termsAccepted) {
+          setLoading(false);
+          return setAuthError('Você precisa ler e aceitar os Termos de Uso para criar sua conta.');
+        }
 
         const data = await api('/api/auth/register-request', {
           method: 'POST',
-          body: JSON.stringify({ name: name.trim(), email: cleanEmail, password, budget: numBudget })
+          body: JSON.stringify({ name: name.trim(), email: cleanEmail, password, budget: numBudget, termsAccepted: true })
         });
 
         setAuthMode('verify_register');
@@ -1395,25 +1484,112 @@ export default function App() {
                 </div>
 
                 {authMode === 'create' ? (
-                  <div className="flex flex-col gap-1.5">
-                    <label htmlFor="budget" className="text-navy text-xs font-bold uppercase tracking-wider">Orçamento mensal</label>
-                    <div className="relative flex items-center">
-                      <span className="absolute left-3.5 text-muted pointer-events-none flex items-center justify-center">
-                        <Icon name="wallet" size={18} />
-                      </span>
-                      <input
-                        id="budget"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={budget}
-                        onChange={(e) => setBudget(e.target.value)}
-                        placeholder="R$ 0,00"
-                        required
-                        className="w-full border border-line rounded-xl py-3 pl-11 pr-4 outline-none text-ink bg-pale focus:border-blue focus:ring-4 focus:ring-blue/10 transition-all text-base sm:text-sm"
-                      />
+                  <>
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="budget" className="text-navy text-xs font-bold uppercase tracking-wider">Orçamento mensal</label>
+                      <div className="relative flex items-center">
+                        <span className="absolute left-3.5 text-muted pointer-events-none flex items-center justify-center">
+                          <Icon name="wallet" size={18} />
+                        </span>
+                        <input
+                          id="budget"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={budget}
+                          onChange={(e) => setBudget(e.target.value)}
+                          placeholder="R$ 0,00"
+                          required
+                          className="w-full border border-line rounded-xl py-3 pl-11 pr-4 outline-none text-ink bg-pale focus:border-blue focus:ring-4 focus:ring-blue/10 transition-all text-base sm:text-sm"
+                        />
+                      </div>
                     </div>
-                  </div>
+
+                    {/* Bloco Interativo de Termos de Uso e Aceite */}
+                    <div
+                      className={`p-3.5 sm:p-4 rounded-2xl border transition-all ${
+                        !termsAccepted && authError && authError.includes('Termos')
+                          ? 'border-bad bg-bad-bg/60 animate-shake ring-2 ring-bad/20'
+                          : termsAccepted
+                          ? 'border-ok/30 bg-[#f0faf5]'
+                          : 'border-line bg-pale/70 hover:border-blue/30'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <button
+                          type="button"
+                          id="terms-checkbox-btn"
+                          onClick={() => {
+                            const next = !termsAccepted;
+                            setTermsAccepted(next);
+                            if (next) showToast('Termos de Uso aceitos!');
+                            if (authError && authError.includes('Termos')) setAuthError('');
+                          }}
+                          className={`mt-0.5 w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 transition-all cursor-pointer ${
+                            termsAccepted
+                              ? 'bg-blue border-blue text-white shadow-xs'
+                              : 'bg-white border-line hover:border-blue/60'
+                          }`}
+                          aria-checked={termsAccepted}
+                          role="checkbox"
+                          aria-label="Aceitar Termos de Uso e Política de Privacidade"
+                        >
+                          {termsAccepted && <Icon name="check" size={13} className="text-white stroke-[3]" />}
+                        </button>
+
+                        <div className="flex-1 text-xs sm:text-[13px] leading-snug">
+                          <span className="text-navy font-medium">
+                            Li e concordo com os{' '}
+                            <button
+                              type="button"
+                              id="open-terms-link"
+                              onClick={() => setShowTermsModal(true)}
+                              className="text-blue font-bold hover:underline inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              Termos de Uso e Privacidade
+                              <Icon name="fileText" size={13} className="text-blue" />
+                            </button>
+                          </span>
+                          <p className="text-muted text-[11px] sm:text-xs mt-1 mb-0">
+                            Seus dados financeiros são criptografados e confidenciais conforme a LGPD.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-2.5 pt-2.5 border-t border-line/60 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          id="view-terms-btn"
+                          onClick={() => setShowTermsModal(true)}
+                          className="text-xs font-bold text-navy hover:text-blue inline-flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-white border border-line hover:border-blue/40 shadow-xs transition-all cursor-pointer"
+                        >
+                          <Icon name="fileText" size={14} className="text-blue" />
+                          Ler termos completos
+                        </button>
+
+                        <button
+                          type="button"
+                          id="accept-terms-btn"
+                          onClick={() => {
+                            const nextState = !termsAccepted;
+                            setTermsAccepted(nextState);
+                            if (nextState) {
+                              showToast('Termos de Uso aceitos com sucesso!');
+                              if (authError && authError.includes('Termos')) setAuthError('');
+                            }
+                          }}
+                          className={`text-xs font-bold inline-flex items-center gap-1.5 py-1.5 px-3.5 rounded-xl transition-all cursor-pointer ${
+                            termsAccepted
+                              ? 'bg-ok/15 text-ok hover:bg-ok/25 border border-ok/20'
+                              : 'bg-blue text-white hover:bg-blue-dark shadow-xs hover:-translate-y-0.5'
+                          }`}
+                        >
+                          <Icon name="check" size={13} />
+                          {termsAccepted ? 'Termos Aceitos' : 'Aceitar termos'}
+                        </button>
+                      </div>
+                    </div>
+                  </>
                 ) : (
                   <div className="flex justify-end -mt-1.5">
                     <button
@@ -1455,6 +1631,18 @@ export default function App() {
                   {authMode === 'create' ? 'Entrar' : 'Criar conta'}
                 </button>
               </p>
+
+              <p className="text-center text-muted/80 text-[11px] sm:text-xs mt-3 mb-0">
+                Ao utilizar o Azulize, você concorda com nossos{' '}
+                <button
+                  type="button"
+                  onClick={() => setShowTermsModal(true)}
+                  className="text-blue font-semibold hover:underline cursor-pointer"
+                >
+                  Termos de Uso
+                </button>
+                .
+              </p>
             </>
           )}
         </section>
@@ -1464,80 +1652,61 @@ export default function App() {
         /* ========================================================================= */
         <section className="w-full max-w-5xl mx-auto animate-rise">
           {/* Topbar */}
-          <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 pb-4 border-b border-line/60">
-            <div className="flex items-center justify-between">
-              <div
-                onClick={() => setView('home')}
-                className="flex items-center gap-2.5 font-display font-extrabold text-xl sm:text-2xl text-navy tracking-tight select-none cursor-pointer"
-              >
-                <span className="grid place-items-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-white bg-gradient-to-br from-[#52a9ee] to-blue shadow-[0_4px_14px_rgba(47,143,220,0.35)] shrink-0">
-                  <Icon name="wallet" size={20} />
-                </span>
-                <span>Azulize</span>
-              </div>
-
-              {/* Botões visíveis no topo no mobile */}
-              <div className="flex sm:hidden items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setView('settings')}
-                  className={`inline-flex items-center gap-1.5 border border-line rounded-xl py-1.5 px-2.5 text-xs font-bold transition-colors shadow-sm active:scale-95 ${
-                    view === 'settings' ? 'bg-blue text-white border-blue' : 'bg-white text-navy hover:bg-sky'
-                  }`}
-                  title="Configurações do usuário"
-                >
-                  <Icon name="settings" size={14} />
-                  <span>Ajustes</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="inline-flex items-center gap-1 border border-line rounded-xl py-1.5 px-2.5 bg-white text-navy font-bold text-xs hover:bg-sky transition-colors shadow-sm active:scale-95"
-                >
-                  <Icon name="out" size={14} /> Sair
-                </button>
-              </div>
+          <header className="flex items-center justify-between gap-3 mb-6 pb-4 border-b border-line/60">
+            <div
+              onClick={() => setView('home')}
+              className="flex items-center gap-2 sm:gap-2.5 font-display font-extrabold text-xl sm:text-2xl text-navy tracking-tight select-none cursor-pointer"
+            >
+              <span className="grid place-items-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-white bg-gradient-to-br from-[#52a9ee] to-blue shadow-[0_4px_14px_rgba(47,143,220,0.35)] shrink-0">
+                <Icon name="wallet" size={20} />
+              </span>
+              <span>Azulize</span>
             </div>
 
-            <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3">
               {/* Perfil do usuário clicável que abre configurações */}
               <button
                 type="button"
                 onClick={() => setView('settings')}
-                className="group flex items-center gap-3 p-1.5 sm:pr-3 rounded-2xl hover:bg-white/80 border border-transparent hover:border-line transition-all text-left"
+                className={`group flex items-center gap-2.5 p-1 sm:pr-3 rounded-2xl border transition-all text-left cursor-pointer ${
+                  view === 'settings'
+                    ? 'bg-sky/80 border-blue/40 shadow-xs'
+                    : 'hover:bg-white/80 border-transparent hover:border-line'
+                }`}
                 title="Abrir configurações de perfil"
               >
-                <UserAvatar user={session} size={42} className="ring-2 ring-blue/30 group-hover:ring-blue transition-all" />
-                <div className="hidden min-[420px]:block">
-                  <p className="text-navy font-bold text-xs sm:text-sm m-0 leading-tight group-hover:text-blue transition-colors">
+                <UserAvatar user={session} size={38} className="ring-2 ring-blue/30 group-hover:ring-blue transition-all" />
+                <div className="hidden sm:block">
+                  <p className="text-navy font-bold text-xs sm:text-sm m-0 leading-tight group-hover:text-blue transition-colors truncate max-w-[140px]">
                     {summary.user_name || session?.name}
                   </p>
                   <span className="text-[11px] text-muted block mt-0.5">Meu perfil</span>
                 </div>
               </button>
 
-              {/* Botões visíveis em telas maiores */}
-              <div className="hidden sm:flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setView('settings')}
-                  className={`inline-flex items-center gap-2 border rounded-xl py-2.5 px-3.5 font-bold text-sm transition-all shadow-sm active:scale-95 ${
-                    view === 'settings'
-                      ? 'bg-blue text-white border-blue shadow-[0_4px_12px_rgba(47,143,220,0.25)]'
-                      : 'border-line bg-white text-navy hover:bg-sky'
-                  }`}
-                  title="Configurações do usuário"
-                >
-                  <Icon name="settings" size={16} /> Configurações
-                </button>
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="inline-flex items-center gap-2 border border-line rounded-xl py-2.5 px-3.5 bg-white text-navy font-bold text-sm hover:bg-bad-bg/60 hover:text-bad hover:border-bad/30 transition-all shadow-sm active:scale-95"
-                >
-                  <Icon name="out" size={16} /> Sair
-                </button>
-              </div>
+              {/* Botão de Ajustes (Desktop) */}
+              <button
+                type="button"
+                onClick={() => setView('settings')}
+                className={`hidden sm:inline-flex items-center gap-2 border rounded-xl py-2 px-3 font-bold text-xs sm:text-sm transition-all shadow-sm active:scale-95 ${
+                  view === 'settings'
+                    ? 'bg-blue text-white border-blue shadow-[0_4px_12px_rgba(47,143,220,0.25)]'
+                    : 'border-line bg-white text-navy hover:bg-sky'
+                }`}
+                title="Configurações do usuário"
+              >
+                <Icon name="settings" size={15} /> Ajustes
+              </button>
+
+              {/* Botão de Logout */}
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="inline-flex items-center gap-1.5 border border-line rounded-xl py-2 px-2.5 sm:px-3.5 bg-white text-navy font-bold text-xs sm:text-sm hover:bg-bad-bg/60 hover:text-bad hover:border-bad/30 transition-all shadow-sm active:scale-95 cursor-pointer"
+                title="Encerrar sessão"
+              >
+                <Icon name="out" size={15} /> <span className="hidden sm:inline">Sair</span>
+              </button>
             </div>
           </header>
 
@@ -1582,7 +1751,7 @@ export default function App() {
           {view === 'home' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
               {/* Card de Saldo */}
-              <article className="lg:col-span-7 bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-5 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)] flex flex-col justify-between">
+              <article className="lg:col-span-7 bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-4 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)] flex flex-col justify-between order-1">
                 <div>
                   <h2 className="flex items-center gap-2.5 text-navy font-display font-bold text-base sm:text-lg mb-1">
                     <span className="grid place-items-center w-7 h-7 rounded-lg bg-sky text-blue">
@@ -1725,8 +1894,129 @@ export default function App() {
                 </div>
               </article>
 
+              {/* Seção Gráfica: Resumo Visual dos Gastos (No Smartphone, fica logo após o Saldo com order-2!) */}
+              <article className="lg:col-span-12 bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-4 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)] order-2 lg:order-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-line mb-4">
+                  <div>
+                    <h2 className="flex items-center gap-2.5 text-navy font-display font-bold text-base sm:text-lg mb-0.5">
+                      <span className="grid place-items-center w-7 h-7 rounded-lg bg-sky text-blue">
+                        <Icon name="chart" size={16} />
+                      </span>
+                      Análise Gráfica dos Gastos {homeIsCurrentMonth ? '(Mês Atual)' : '(Lançamentos Recentes)'}
+                    </h2>
+                    <p className="text-muted text-xs sm:text-sm m-0">
+                      Acompanhamento visual diário e distribuição de despesas por categoria.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setView('hist')}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-blue hover:text-blue-dark hover:underline self-start sm:self-auto cursor-pointer"
+                  >
+                    Ver histórico com filtros avançados <Icon name="back" size={12} className="rotate-180" />
+                  </button>
+                </div>
+
+                {expenses.length > 0 ? (
+                  <div>
+                    {/* Linha do Tempo / Barras Diárias com destaque total */}
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-bold text-navy flex items-center gap-1.5">
+                        <Icon name="chart" size={14} className="text-blue" /> Evolução Diária de Gastos
+                      </span>
+                      <span className="text-[11px] text-muted font-medium">
+                        {homeIsCurrentMonth ? 'Mês atual' : 'Lançamentos recentes'} (toque em uma barra para filtrar)
+                      </span>
+                    </div>
+
+                    <div className="w-full">
+                      <SpendingBarChart
+                        data={homeTimelineStats}
+                        selectedDate={null}
+                        onSelectDate={(dt) => {
+                          setHistoryDateFilter(dt);
+                          setView('hist');
+                        }}
+                      />
+                    </div>
+
+                    {/* Distribuição por Categorias (Barras Lineares Modernas) */}
+                    {homeCategoryStats.length > 0 && (
+                      <div className="mt-6 pt-5 border-t border-line">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs font-bold text-navy flex items-center gap-1.5">
+                            <Icon name="tag" size={14} className="text-blue" /> Principais Categorias
+                          </span>
+                          <span className="text-[11px] text-muted">{homeCategoryStats.length} categorias</span>
+                        </div>
+
+                        {/* Barra segmentada horizontal contínua */}
+                        <div className="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden flex mb-3.5 shadow-inner">
+                          {homeCategoryStats.map((c) => (
+                            <div
+                              key={c.name}
+                              style={{ width: `${c.percentage}%`, backgroundColor: c.config.color }}
+                              title={`${c.name}: ${c.percentage.toFixed(1)}% (${money(c.total)})`}
+                              className="h-full hover:opacity-85 transition-all cursor-pointer"
+                              onClick={() => {
+                                setHistoryCategoryFilter(c.name);
+                                setView('hist');
+                              }}
+                            />
+                          ))}
+                        </div>
+
+                        {/* Grade de Categorias com barras de progresso */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                          {homeCategoryStats.slice(0, 6).map((c) => (
+                            <button
+                              key={c.name}
+                              type="button"
+                              onClick={() => {
+                                setHistoryCategoryFilter(c.name);
+                                setView('hist');
+                              }}
+                              className="flex flex-col gap-1.5 p-2.5 rounded-xl border border-line bg-pale/40 hover:bg-pale transition-all text-left cursor-pointer group"
+                            >
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="flex items-center gap-2 font-bold text-navy truncate">
+                                  <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.config.color }} />
+                                  <span className="truncate">{c.name}</span>
+                                </span>
+                                <span className="font-extrabold text-navy shrink-0">{money(c.total)}</span>
+                              </div>
+                              <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-500"
+                                  style={{ width: `${c.percentage}%`, backgroundColor: c.config.color }}
+                                />
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] text-muted">
+                                <span>{c.count} {c.count === 1 ? 'gasto' : 'gastos'}</span>
+                                <span className="font-bold">{c.percentage.toFixed(1)}%</span>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid justify-items-center gap-2 py-8 text-center text-muted">
+                    <span className="grid place-items-center w-12 h-12 rounded-2xl bg-sky text-blue mb-1">
+                      <Icon name="chart" size={24} />
+                    </span>
+                    <b className="text-navy text-sm">Nenhum gasto registrado para gerar os gráficos</b>
+                    <span className="text-xs max-w-sm">
+                      Adicione despesas no formulário abaixo para visualizar seus gráficos automaticamente.
+                    </span>
+                  </div>
+                )}
+              </article>
+
               {/* Card de Adicionar Gasto */}
-              <article className="lg:col-span-5 bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-5 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)] self-start">
+              <article className="lg:col-span-5 bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-4 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)] self-start order-3 lg:order-2">
                 <h2 className="flex items-center gap-2.5 text-navy font-display font-bold text-base sm:text-lg mb-1">
                   <span className="grid place-items-center w-7 h-7 rounded-lg bg-sky text-blue">
                     <Icon name="plus" size={16} />
@@ -1803,7 +2093,7 @@ export default function App() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="inline-flex justify-center items-center gap-2 rounded-xl py-3.5 px-5 font-bold text-white bg-blue shadow-[0_8px_20px_rgba(47,143,220,0.25)] hover:bg-blue-dark hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-60 text-sm sm:text-base mt-1"
+                    className="inline-flex justify-center items-center gap-2 rounded-xl py-3.5 px-5 font-bold text-white bg-blue shadow-[0_8px_20px_rgba(47,143,220,0.25)] hover:bg-blue-dark hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-60 text-sm sm:text-base mt-1 cursor-pointer"
                   >
                     <Icon name="plus" size={18} /> {loading ? 'Salvando gasto...' : 'Adicionar gasto'}
                   </button>
@@ -1932,12 +2222,16 @@ export default function App() {
               {/* 2. Quatro Cards de Estatísticas Rápidas do Histórico */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 <div className="bg-white/95 backdrop-blur-sm border border-line rounded-2xl p-4 sm:p-5 shadow-sm">
-                  <span className="text-muted text-[11px] sm:text-xs font-semibold uppercase tracking-wider block">Total no período</span>
+                  <span className="text-muted text-[11px] sm:text-xs font-semibold uppercase tracking-wider block">
+                    {historyCategoryFilter || historyDateFilter ? 'Total Filtrado' : 'Total no período'}
+                  </span>
                   <strong className="font-display font-extrabold text-navy text-lg sm:text-2xl block mt-1">
                     {money(totalFiltered)}
                   </strong>
                   <span className="inline-block mt-1 text-[11px] font-semibold text-muted">
-                    {filteredExpenses.length} {filteredExpenses.length === 1 ? 'registro' : 'registros'}
+                    {historyCategoryFilter || historyDateFilter
+                      ? `de ${money(totalPeriod)} no período`
+                      : `${filteredExpenses.length} ${filteredExpenses.length === 1 ? 'registro' : 'registros'}`}
                   </span>
                 </div>
 
@@ -1981,19 +2275,47 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 3. Seção de Gráficos: Rosca de Categorias & Gráfico de Barras Temporal */}
+              {/* Mobile Tab Switcher para Gráficos */}
+              <div className="flex lg:hidden bg-slate-100 p-1 rounded-2xl mb-1 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setHistChartTab('categories')}
+                  className={`flex-1 py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                    histChartTab === 'categories'
+                      ? 'bg-white text-blue shadow-sm font-bold'
+                      : 'text-muted hover:text-navy'
+                  }`}
+                >
+                  <Icon name="tag" size={14} />
+                  Categorias
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistChartTab('timeline')}
+                  className={`flex-1 py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                    histChartTab === 'timeline'
+                      ? 'bg-white text-blue shadow-sm font-bold'
+                      : 'text-muted hover:text-navy'
+                  }`}
+                >
+                  <Icon name="chart" size={14} />
+                  Linha do Tempo
+                </button>
+              </div>
+
+              {/* 3. Seção de Gráficos: Distribuição por Categorias & Gráfico de Barras Temporal */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6">
-                {/* Gráfico 1: Rosca de Categorias */}
-                <article className="lg:col-span-6 bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-5 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)] flex flex-col justify-between">
+                {/* Painel 1: Categorias (Barras Lineares) */}
+                <article className={`${histChartTab === 'categories' ? 'flex' : 'hidden lg:flex'} lg:col-span-6 bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-5 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)] flex-col justify-between`}>
                   <div className="flex items-center justify-between pb-4 border-b border-line mb-4">
                     <div>
                       <h3 className="font-display font-bold text-navy text-base sm:text-lg flex items-center gap-2 m-0">
                         <span className="grid place-items-center w-7 h-7 rounded-lg bg-sky text-blue">
-                          <Icon name="pie" size={16} />
+                          <Icon name="tag" size={16} />
                         </span>
                         Gastos por Categoria
                       </h3>
-                      <p className="text-muted text-xs mt-0.5 mb-0">Distribuição percentual dos gastos</p>
+                      <p className="text-muted text-xs mt-0.5 mb-0">Distribuição percentual dos gastos por categoria</p>
                     </div>
 
                     {historyCategoryFilter && (
@@ -2008,20 +2330,25 @@ export default function App() {
                   </div>
 
                   {categoryStats.length > 0 ? (
-                    <div className="flex flex-col sm:flex-row items-center gap-6 my-auto">
-                      {/* Gráfico SVG de Rosca */}
-                      <div className="shrink-0">
-                        <CategoryDonutChart
-                          categories={categoryStats}
-                          total={totalFiltered}
-                          activeCategory={hoveredCategory || historyCategoryFilter}
-                          onSelectCategory={(cat) => setHistoryCategoryFilter(cat)}
-                          onHoverCategory={(cat) => setHoveredCategory(cat)}
-                        />
+                    <div className="flex flex-col gap-3.5 my-auto w-full">
+                      {/* Barra Segmentada Proporcional */}
+                      <div className="w-full h-3 rounded-full bg-slate-100 overflow-hidden flex shadow-inner">
+                        {categoryStats.map((c) => (
+                          <div
+                            key={c.name}
+                            style={{
+                              width: `${c.percentage}%`,
+                              backgroundColor: c.config.color
+                            }}
+                            title={`${c.name}: ${c.percentage.toFixed(1)}% (${money(c.total)})`}
+                            className="h-full hover:opacity-85 transition-all cursor-pointer"
+                            onClick={() => setHistoryCategoryFilter(historyCategoryFilter === c.name ? null : c.name)}
+                          />
+                        ))}
                       </div>
 
                       {/* Lista e Legenda de Categorias */}
-                      <div className="flex-1 w-full flex flex-col gap-2.5 max-h-[260px] overflow-y-auto pr-1">
+                      <div className="w-full flex flex-col gap-2 max-h-[290px] overflow-y-auto pr-1">
                         {categoryStats.map((c) => {
                           const isSelected = historyCategoryFilter === c.name;
                           return (
@@ -2067,7 +2394,7 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="grid justify-items-center gap-2 py-12 text-center text-muted my-auto">
-                      <Icon name="pie" size={32} className="text-muted/40 mb-1" />
+                      <Icon name="tag" size={32} className="text-muted/40 mb-1" />
                       <b className="text-navy text-sm">Sem categorias para exibir</b>
                       <span className="text-xs max-w-xs">Nenhum gasto encontrado para os filtros atuais.</span>
                     </div>
@@ -2075,7 +2402,7 @@ export default function App() {
                 </article>
 
                 {/* Gráfico 2: Linha do Tempo / Barras Diárias */}
-                <article className="lg:col-span-6 bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-5 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)] flex flex-col justify-between">
+                <article className={`${histChartTab === 'timeline' ? 'flex' : 'hidden lg:flex'} lg:col-span-6 bg-white/95 backdrop-blur-sm border border-line rounded-3xl p-5 sm:p-7 shadow-[0_15px_45px_rgba(34,111,163,0.08)] flex-col justify-between`}>
                   <div className="flex items-center justify-between pb-4 border-b border-line mb-4">
                     <div>
                       <h3 className="font-display font-bold text-navy text-base sm:text-lg flex items-center gap-2 m-0">
@@ -2125,12 +2452,28 @@ export default function App() {
                     </h3>
                     <p className="text-muted text-xs mt-0.5 mb-0">
                       Exibindo {filteredExpenses.length} {filteredExpenses.length === 1 ? 'gasto encontrado' : 'gastos encontrados'}
+                      {historyCategoryFilter && ` na categoria "${historyCategoryFilter}"`}
+                      {historyDateFilter && ` no dia ${historyDateFilter.split('-').reverse().join('/')}`}
                     </p>
                   </div>
 
-                  <span className="inline-flex items-center gap-1.5 py-1 px-3 rounded-xl bg-[#e6f9f0] text-[#166534] font-bold text-xs sm:text-sm self-start sm:self-auto">
-                    Total: {money(totalFiltered)}
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {(historyCategoryFilter || historyDateFilter) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHistoryCategoryFilter(null);
+                          setHistoryDateFilter(null);
+                        }}
+                        className="text-xs text-blue font-bold hover:underline py-1 px-2.5 rounded-lg bg-sky border border-blue/20"
+                      >
+                        Limpar seleção dos gráficos
+                      </button>
+                    )}
+                    <span className="inline-flex items-center gap-1.5 py-1 px-3 rounded-xl bg-[#e6f9f0] text-[#166534] font-bold text-xs sm:text-sm self-start sm:self-auto">
+                      Total: {money(totalFiltered)}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex flex-col divide-y divide-line mt-2">
@@ -2515,13 +2858,23 @@ export default function App() {
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="inline-flex items-center gap-2 border border-bad/30 bg-bad-bg/60 text-bad hover:bg-bad hover:text-white rounded-xl py-2.5 px-5 font-bold text-xs sm:text-sm transition-all shadow-sm active:scale-95"
-                  >
-                    <Icon name="out" size={16} /> Encerrar sessão
-                  </button>
+                  <div className="flex items-center gap-2.5 flex-wrap justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setShowTermsModal(true)}
+                      className="inline-flex items-center gap-2 border border-line bg-pale hover:bg-sky text-navy rounded-xl py-2.5 px-4 font-bold text-xs sm:text-sm transition-all shadow-xs cursor-pointer"
+                    >
+                      <Icon name="fileText" size={16} className="text-blue" /> Termos de Uso
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="inline-flex items-center gap-2 border border-bad/30 bg-bad-bg/60 text-bad hover:bg-bad hover:text-white rounded-xl py-2.5 px-5 font-bold text-xs sm:text-sm transition-all shadow-sm active:scale-95"
+                    >
+                      <Icon name="out" size={16} /> Encerrar sessão
+                    </button>
+                  </div>
                 </article>
               </div>
             </div>
@@ -2619,6 +2972,18 @@ export default function App() {
           )}
         </section>
       )}
+
+      {/* Modal de Termos de Uso e Política de Privacidade */}
+      <TermsModal
+        isOpen={showTermsModal}
+        onClose={() => setShowTermsModal(false)}
+        onAccept={() => {
+          setTermsAccepted(true);
+          if (authError && authError.includes('Termos')) setAuthError('');
+          showToast('Termos de Uso aceitos com sucesso!');
+        }}
+        isAccepted={termsAccepted}
+      />
     </div>
   );
 }

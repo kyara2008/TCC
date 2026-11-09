@@ -1,6 +1,20 @@
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
+// Carrega .env da raiz ou do diretório atual se existir
+const envCandidates = [
+  path.join(__dirname, '..', '.env'),
+  path.join(__dirname, '.env'),
+  path.join(process.cwd(), '.env')
+];
+for (const envPath of envCandidates) {
+  if (fs.existsSync(envPath)) {
+    require('dotenv').config({ path: envPath });
+    break;
+  }
+}
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
@@ -12,13 +26,17 @@ const PORT = process.env.PORT || 3000;
 const FRONTEND_DIST = path.join(__dirname, '..', 'frontend', 'dist');
 const FRONTEND_DIR = fs.existsSync(FRONTEND_DIST) ? FRONTEND_DIST : path.join(__dirname, '..', 'frontend');
 
-if (!process.env.DATABASE_URL) {
-  console.error('❌ ERRO: DATABASE_URL não definida no arquivo .env');
-  process.exit(1);
+// Inicializa a conexão direta com o Neon Serverless PostgreSQL de forma segura
+let sql = null;
+if (process.env.DATABASE_URL) {
+  try {
+    sql = neon(process.env.DATABASE_URL);
+  } catch (err) {
+    console.error('❌ Erro ao inicializar conexão Neon:', err.message);
+  }
+} else {
+  console.warn('⚠️ AVISO: DATABASE_URL não definida no ambiente. Configure no .env ou nas variáveis do Vercel.');
 }
-
-// Inicializa a conexão direta com o Neon Serverless PostgreSQL
-const sql = neon(process.env.DATABASE_URL);
 
 // Habilita CORS completo para suportar requisições do Live Server (porta 5500), file:// ou localhost:3000
 app.use(cors({
@@ -30,6 +48,23 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(FRONTEND_DIR));
+
+// Validação de banco para rotas da API
+app.use('/api', (req, res, next) => {
+  if (!sql && process.env.DATABASE_URL) {
+    try {
+      sql = neon(process.env.DATABASE_URL);
+    } catch (e) {
+      console.error('Falha ao reconectar Neon:', e);
+    }
+  }
+  if (!sql) {
+    return res.status(500).json({
+      error: 'Banco de dados não configurado. Adicione a variável DATABASE_URL no .env ou no painel da Vercel.'
+    });
+  }
+  next();
+});
 
 // ==============================================================================
 // UTILITÁRIOS DE CRIPTOGRAFIA E VALIDAÇÃO
@@ -229,7 +264,7 @@ app.get('/api/test-email', async (req, res) => {
 // 2. Cadastro de Usuário - Etapa 1: Solicitar código por e-mail
 app.post('/api/auth/register-request', async (req, res) => {
   try {
-    const { name, email, password, budget } = req.body;
+    const { name, email, password, budget, termsAccepted } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Nome é obrigatório.' });
@@ -244,6 +279,9 @@ app.post('/api/auth/register-request', async (req, res) => {
     const numBudget = Number(budget);
     if (isNaN(numBudget) || numBudget < 0) {
       return res.status(400).json({ error: 'Orçamento mensal deve ser um valor válido maior ou igual a zero.' });
+    }
+    if (termsAccepted === false) {
+      return res.status(400).json({ error: 'Você precisa aceitar os Termos de Uso para criar uma conta.' });
     }
 
     // Verifica se já existe conta ativa com esse e-mail no PostgreSQL
@@ -413,7 +451,7 @@ app.post('/api/auth/register-confirm', async (req, res) => {
 // 4. Cadastro direto (compatibilidade)
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { name, email, password, budget } = req.body;
+    const { name, email, password, budget, termsAccepted } = req.body;
 
     if (!name || !name.trim()) return res.status(400).json({ error: 'Nome é obrigatório.' });
     const cleanEmail = String(email || '').trim().toLowerCase();
@@ -421,6 +459,7 @@ app.post('/api/auth/register', async (req, res) => {
     if (!password || password.length < 8) return res.status(400).json({ error: 'A senha precisa ter no mínimo 8 caracteres.' });
     const numBudget = Number(budget);
     if (isNaN(numBudget) || numBudget < 0) return res.status(400).json({ error: 'Orçamento mensal inválido.' });
+    if (termsAccepted === false) return res.status(400).json({ error: 'Você precisa aceitar os Termos de Uso para criar uma conta.' });
 
     const existing = await sql`SELECT id FROM users WHERE email = ${cleanEmail};`;
     if (existing.length > 0) return res.status(409).json({ error: 'Já existe uma conta cadastrada com esse e-mail.' });
@@ -1039,11 +1078,15 @@ app.use((req, res, next) => {
   next();
 });
 
-// Inicia o servidor HTTP
-app.listen(PORT, () => {
-  console.log(`=======================================================`);
-  console.log(`🚀 Servidor Azulize rodando em: http://localhost:${PORT}`);
-  console.log(`🐘 Conectado diretamente ao Neon Serverless PostgreSQL`);
-  console.log(`📧 Google SMTP: ${process.env.EMAIL_USER ? 'Configurado (' + process.env.EMAIL_USER + ')' : 'Modo Simulação (defina EMAIL_USER e EMAIL_PASS no .env)'}`);
-  console.log(`=======================================================`);
-});
+// Inicia o servidor HTTP apenas quando executado diretamente como script principal e fora da Vercel
+if (!process.env.VERCEL && require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`=======================================================`);
+    console.log(`🚀 Servidor Azulize rodando em: http://localhost:${PORT}`);
+    console.log(`🐘 Conectado diretamente ao Neon Serverless PostgreSQL`);
+    console.log(`📧 Google SMTP: ${process.env.EMAIL_USER ? 'Configurado (' + process.env.EMAIL_USER + ')' : 'Modo Simulação (defina EMAIL_USER e EMAIL_PASS no .env)'}`);
+    console.log(`=======================================================`);
+  });
+}
+
+module.exports = app;
